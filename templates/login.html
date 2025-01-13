@@ -1,0 +1,27 @@
+{% extends "layout.html" %}
+<title>{% block title %}Login{% endblock %}</title>
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">
+{% endblock %}
+
+{% block content %}
+    <div class="login_container">
+        <form id="login" class="inputs" method="post">
+            <input type="text" name="Lemail" class="input_field" placeholder="Email" required>
+            <input type="text" name="Lpassword" class="input_field" placeholder="Password" required><br>
+            <button type="submit" class="submit_button">Login</button>
+        </form>   
+    </div>
+    </form>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <ul class=flashes>
+            {% for message in messages %}
+                <li>{{ message }}</li>
+            {% endfor %}
+            </ul>
+        {% endif %}
+    {% endwith %}
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "layout.html" %}
+<title>{% block title %}Home{% endblock %}</title>
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='index.css') }}">
+{% endblock %}
+
+{% block content %}
+
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+        <ul class=flashes>
+        {% for message in messages %}
+        <li>{{ message }}</li>
+        {% endfor %}
+        </ul>
+    {% endif %}
+    {% endwith %}
+    
+    <div class="partner-container">
+        <img src="static\ovito-logo.png" alt="Company Logo" class="partner" width="85" height="85">
+        <h1>Partnered with OVITO.</h1>
+    </div>
+
+    <div class="section1">
+        <div class="articles-container">
+            <div class="art-cap">This weeks top articles.</div>
+            <div class="articles">
+                <div class="article" id="art1"><img src="https://specificpolymers.com/wp-content/uploads/2021/05/shutterstock_1868254759.png" alt="Article 1 Image"></div>
+                <div class="vertical-articles">
+                    <div id="art2" class="article"><img src="https://analyticsindiamag.com/wp-content/uploads/2018/04/Molecular-Dynamics.jpg" alt="Article 2 Image"></div>
+                    <div id="art3" class="article"><img src="https://e1.pxfuel.com/desktop-wallpaper/233/178/desktop-wallpaper-molecular-biology-biology.jpg" alt="Article 3 Image"></div>
+                </div>
+            </div>
+        </div>
+        <div class="article-text">
+            <p id="art-text">Want to browse more <a href="/login">articles</a>?</p>
+        </div>
+    </div>
+{% endblock %}
+
+

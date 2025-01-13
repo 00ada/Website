@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='layout.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Karla:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
+
+    {% block extra_head %}
+    {% endblock %}
+</head>
+<body>
+    <header class="header">
+        <a href="#" class="logo">Logo</a>
+        
+        <nav class="navbar">
+            {% if current_user.is_authenticated %}
+                <a href="#">Explore</a>
+                <a href="#">Articles</a>
+                <a href="/account">Account</a>
+                <a href="/logout">Logout</a>
+            {% else %}
+                <a href="#">Explore</a>
+                <a href="#">Articles</a>
+                <a href="/login">Login</a>
+            {% endif %}
+        </nav>
+    </header>
+
+    {% block content %}
+
+    {% endblock %}
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
