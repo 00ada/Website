@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monoatomic Gas Simulation with Lennard-Jones Potential in Pixi.js</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        #container {
+            position: absolute;
+            top: 50px;
+            left: 50px;
+            width: 800px;
+            height: 600px;
+            border: 2px solid white;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/6.5.8/browser/pixi.min.js"></script>
+</head>
+<body>
+
+<div id="container"></div>
+
+<script>
+    const width = 400;
+    const height = 400;
+    const particleCount = 20;
+    const particleRadius = 10;
+    const dt = 1;
+
+    let app, particles;
+
+    function init() {
+        app = new PIXI.Application({
+            width: width,
+            height: height,
+            backgroundColor: 0x000000
+        });
+        document.getElementById('container').appendChild(app.view);
+
+        particles = createParticles(particleCount);
+
+        app.ticker.add(delta => animate(delta));
+    }
+
+    function createParticles(count) {
+        let particlesArray = [];
+        for (let i = 0; i < count; i++) {
+            const particle = new PIXI.Graphics();
+            particle.beginFill(0x00ff00);
+            particle.drawCircle(0, 0, particleRadius);
+            particle.endFill();
+            particle.x = Math.random() * (width - 2 * particleRadius) + particleRadius;
+            particle.y = Math.random() * (height - 2 * particleRadius) + particleRadius;
+            particle.vx = (Math.random() - 0.5) * 2;
+            particle.vy = (Math.random() - 0.5) * 2;
+            particle.forceX = 1;
+            particle.forceY = 1;
+
+            app.stage.addChild(particle);
+            particlesArray.push(particle);
+        }
+        return particlesArray;
+    }
+
+    function get_mindists() {
+        for (let i = 0; i < particleCount; i++) {
+            for (let j = 1; j < particleCount; j++) {
+                let particleDists = []
+                min_dist = Math.sqrt((i.x - j.x)**2 + (i.y - j.y)**2)
+            }
+        }
+
+        let sortedDists = particleDists.sort(function(a, b){return a-b});
+
+        return sortedDists;
+    }
+        
+
+    function LJ_force(list, angle) {
+
+
+        Math.cos(angle) * (48 * ( (1/r_ij)**13 - 0.5 * (1/(r_ij))**7)), 
+        Math.sin(angle) * (48 * ( (1/r_ij)**13 - 0.5 * (1/(r_ij))**7)),
+        
+        for (let i = 0; i < particleCount; i++) {
+            for (let j = 1; j < particleCount; j++) {
+                let particleDists = []
+                let min_dist = Math.sqrt((i.x - j.x)**2 + (i.y - j.y)**2)
+                particleDists.push(min_dist);
+            }
+        }
+
+        let sortedDists = particleDists.sort(function(a, b){return a-b});
+        
+        const min_dist = particles
+            .map(i => [i, i.get_mindist()]) // Create tuples of [particle, distance]
+            .sort((a, b) => a[1] - b[1])[0][0]; // Sort by distance and get the first particle
+        
+    }
+    
+    function move() {
+        for (let i = 0; i < particles.length; i++) {
+            const particle = particles[i];
+
+            particle.x += particle.vx*dt + 0.5*dt**2*particle.forceX;
+            particle.y += particle.vy*dt + 0.5*dt**2*particle.forceY;
+
+            if (particle.x >= 400 || particle.x <= 0) {
+                particle.vx *= -1;
+            }
+            if (particle.y >= 400 || particle.y <= 0) {
+                particle.vy *= -1;
+            }
+
+        }
+    }
+
+
+     function animate(delta) {
+        move();
+    }
+
+    init();
+</script>
+
+</body>
+</html>

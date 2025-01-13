@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Molecule Simulation with Langevin Thermostat and Realistic Bonds</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        #container2D {
+            position: absolute;
+            top: 100px;
+            left: 100px;
+            width: 600px;
+            height: 400px;
+            border: 2px solid white;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<!-- Container for 2D simulation -->
+<div id="container2D"></div>
+
+<script>
+    const dt = 0.00001;  // Smaller time step for slower motion
+    const springConstant = 1000;  // Stronger spring constant to ensure bonding between particles
+    const restLength = 60;  // Rest length for bonds (in pixels)
+    const mass = 1;  // Mass of the particles
+    const damping = 0.9;  // Damping factor to resist excessive movement
+    const temperature = 300;  // Room temperature in Kelvin
+    const kB = 1.38e-23;  // Boltzmann constant
+    const relaxConstant = 0.05;  // Relaxation constant to keep bond lengths intact
+
+    let scene, camera, renderer;
+    let oxygen, hydrogen1, hydrogen2;
+    let velocities = [];  // Velocities for particles
+    let positions = [];   // Current positions of particles
+    let oldPositions = []; // Old positions for Verlet integration
+    let bonds = [];  // Lines representing bonds
+
+    const width = 600;
+    const height = 400;
+
+    // Initialize the 2D simulation
+    function init2D() {
+        scene = new THREE.Scene();
+        
+        // Setting up a 2D orthographic camera
+        camera = new THREE.OrthographicCamera(width / -2, width / 2, height / 2, height / -2, 1, 1000);
+        camera.position.z = 10;  // Ensure the camera is positioned correctly
+
+        // Initializing renderer and appending it to the container
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(width, height);
+        document.getElementById('container2D').appendChild(renderer.domElement);
+
+        // Create particles (1 Oxygen, 2 Hydrogens)
+        createWaterMolecule();
+
+        // Create bonds between particles
+        createBonds();
+
+        // Start the simulation loop
+        animate();
+    }
+
+    // Create particles representing the water molecule (1 oxygen, 2 hydrogens)
+    function createWaterMolecule() {
+        const oxygenGeometry = new THREE.CircleGeometry(10, 32);  // Oxygen is larger
+        const hydrogenGeometry = new THREE.CircleGeometry(6, 32);  // Hydrogen is smaller
+
+        const oxygenMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });  // Red for oxygen
+        const hydrogenMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });  // Blue for hydrogen
+
+        // Create oxygen
+        oxygen = new THREE.Mesh(oxygenGeometry, oxygenMaterial);
+        oxygen.position.set(Math.random() * width - width / 2, Math.random() * height - height / 2, 0);  // Oxygen starts at random
+        scene.add(oxygen);
+
+        // Create hydrogens
+        hydrogen1 = new THREE.Mesh(hydrogenGeometry, hydrogenMaterial);
+        hydrogen2 = new THREE.Mesh(hydrogenGeometry, hydrogenMaterial);
+
+        hydrogen1.position.set(Math.random() * width - width / 2, Math.random() * height - height / 2, 0);  // Hydrogen1 starts randomly
+        hydrogen2.position.set(Math.random() * width - width / 2, Math.random() * height - height / 2, 0);  // Hydrogen2 starts randomly
+
+        scene.add(hydrogen1);
+        scene.add(hydrogen2);
+
+        // Initialize positions and old positions for Verlet integration
+        positions = [
+            new THREE.Vector3(oxygen.position.x, oxygen.position.y, 0),  // Oxygen
+            new THREE.Vector3(hydrogen1.position.x, hydrogen1.position.y, 0),  // Hydrogen1
+            new THREE.Vector3(hydrogen2.position.x, hydrogen2.position.y, 0)   // Hydrogen2
+        ];
+
+        oldPositions = positions.map(pos => pos.clone());  // Copy current positions as old positions
+
+        // Initialize velocities (smaller for slower thermal motion)
+        velocities = [
+            new THREE.Vector3((Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1, 0),  // Oxygen
+            new THREE.Vector3((Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1, 0),  // Hydrogen1
+            new THREE.Vector3((Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1, 0)   // Hydrogen2
+        ];
+    }
+
+    // Create bonds between oxygen and hydrogens
+    function createBonds() {
+        const bondMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
+
+        // Create bond between oxygen and hydrogen1
+        const bond1Geometry = new THREE.BufferGeometry().setFromPoints([oxygen.position, hydrogen1.position]);
+        const bond1 = new THREE.Line(bond1Geometry, bondMaterial);
+        bonds.push(bond1);
+        scene.add(bond1);
+
+        // Create bond between oxygen and hydrogen2
+        const bond2Geometry = new THREE.BufferGeometry().setFromPoints([oxygen.position, hydrogen2.position]);
+        const bond2 = new THREE.Line(bond2Geometry, bondMaterial);
+        bonds.push(bond2);
+        scene.add(bond2);
+    }
+
+    // Apply the Langevin thermostat to control temperature and simulate Brownian motion
+    function langevinThermostat() {
+        const gamma = damping;  // Damping coefficient (friction)
+        const sigma = Math.sqrt(2 * gamma * kB * temperature / mass);  // Strength of random force for Brownian motion
+
+        for (let i = 0; i < velocities.length; i++) {
+            // Damping term (velocity-dependent friction)
+            velocities[i].x *= (1 - gamma * dt);
+            velocities[i].y *= (1 - gamma * dt);
+
+            // Random force due to Brownian motion (jittery)
+            velocities[i].x += sigma * (Math.random() - 0.5) * dt * 0.2;  // Make the random force jittery
+            velocities[i].y += sigma * (Math.random() - 0.5) * dt * 0.2;
+        }
+    }
+
+    // Verlet integration for particle motion
+    function verletIntegration() {
+        for (let i = 0; i < positions.length; i++) {
+            let temp = positions[i].clone();  // Store current position
+            // Verlet formula: x(t + dt) = 2 * x(t) - x(t - dt) + a * dt^2 (a is implicit in the velocity)
+            positions[i].x = 2 * positions[i].x - oldPositions[i].x + velocities[i].x * dt * dt;
+            positions[i].y = 2 * positions[i].y - oldPositions[i].y + velocities[i].y * dt * dt;
+
+            oldPositions[i] = temp.clone();  // Update old position
+        }
+    }
+
+    // Apply spring forces (Hooke's Law) to maintain bond lengths
+    function applySpringForces() {
+        // Bond 1: Oxygen to Hydrogen1
+        applySpringForce(positions[0], positions[1]);
+
+        // Bond 2: Oxygen to Hydrogen2
+        applySpringForce(positions[0], positions[2]);
+    }
+
+    // Apply a spring force between two particles
+    function applySpringForce(p1, p2) {
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const forceMagnitude = springConstant * (distance - restLength);  // Hooke's Law: F = k * (d - L0)
+
+        // Apply forces equally but in opposite directions
+        const fx = (dx / distance) * forceMagnitude;
+        const fy = (dy / distance) * forceMagnitude;
+
+        p1.x += fx * dt * relaxConstant;  // Relaxation factor to ensure bond integrity
+        p1.y += fy * dt * relaxConstant;
+        p2.x -= fx * dt * relaxConstant;
+        p2.y -= fy * dt * relaxConstant;
+    }
+
+    // Update bond lines between particles
+    function updateBonds() {
+        bonds[0].geometry.setFromPoints([positions[0], positions[1]]);  // Update bond between oxygen and hydrogen1
+        bonds[1].geometry.setFromPoints([positions[0], positions[2]]);  // Update bond between oxygen and hydrogen2
+    }
+
+    // Animate the particles and update forces
+    function animate() {
+        requestAnimationFrame(animate);
+
+        // Apply Verlet integration for motion
+        verletIntegration();
+
+        // Apply Langevin thermostat (Brownian motion) to control temperature
+        langevinThermostat();
+
+        // Apply spring forces to maintain bond lengths
+        applySpringForces();
+
+        // Update the positions of the particles
+        oxygen.position.set(positions[0].x, positions[0].y, 0);
+        hydrogen1.position.set(positions[1].x, positions[1].y, 0);
+        hydrogen2.position.set(positions[2].x, positions[2].y, 0);
+
+        // Update the bond lines
+        updateBonds();
+
+        // Render the scene
+        renderer.render(scene, camera);
+    }
+
+    // Initialize and run the simulation
+    init2D();
+
+</script>
+
+</body>
+</html>

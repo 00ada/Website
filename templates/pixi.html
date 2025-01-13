@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monoatomic Gas Simulation with Lennard-Jones Potential in Pixi.js</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        #container {
+            position: absolute;
+            top: 50px;
+            left: 50px;
+            width: 800px;
+            height: 600px;
+            border: 2px solid white;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/6.5.8/browser/pixi.min.js"></script>
+</head>
+<body>
+
+<div id="container"></div>
+
+<script>
+    const width = 400;
+    const height = 400;
+    const particleCount = 20;
+    const particleRadius = 10;
+    const dt = 0.0001;
+
+    const lennardJonesEpsilon = 1;  // Adjusted interaction strength
+    const lennardJonesSigma = 25;   // Distance parameter for interaction
+    const interactionRange = lennardJonesSigma * 2.5;  // Effective range of Lennard-Jones forces
+    const maxForce = 10;  // Cap force to prevent extreme repulsion
+
+    let app, particles;
+
+    function init() {
+        app = new PIXI.Application({
+            width: width,
+            height: height,
+            backgroundColor: 0x000000
+        });
+        document.getElementById('container').appendChild(app.view);
+
+        particles = createParticles(particleCount);
+
+        app.ticker.add(delta => animate(delta));
+    }
+
+    function createParticles(count) {
+        let particlesArray = [];
+        for (let i = 0; i < count; i++) {
+            const particle = new PIXI.Graphics();
+            particle.beginFill(0x00ff00);
+            particle.drawCircle(0, 0, particleRadius);
+            particle.endFill();
+            particle.x = Math.random() * (width - 2 * particleRadius) + particleRadius;
+            particle.y = Math.random() * (height - 2 * particleRadius) + particleRadius;
+            particle.vx = (Math.random() - 0.5) * 2;
+            particle.vy = (Math.random() - 0.5) * 2;
+            particle.forceX = 0;
+            particle.forceY = 0;
+
+            app.stage.addChild(particle);
+            particlesArray.push(particle);
+        }
+        return particlesArray;
+    }
+
+    function lennardJonesForce(distance) {
+        // Avoid division by zero at very close distances
+        if (distance < 0.1) distance = 0.1;
+
+        const rRatio = lennardJonesSigma / distance;
+        const rRatio6 = Math.pow(rRatio, 6);
+        const rRatio12 = rRatio6 * rRatio6;
+        let forceMagnitude = 4 * lennardJonesEpsilon * (rRatio12 - rRatio6) / distance;
+
+        // Cap force to prevent extreme values
+        if (forceMagnitude > maxForce) {
+            forceMagnitude = maxForce;
+        } else if (forceMagnitude < -maxForce) {
+            forceMagnitude = -maxForce;
+        }
+        return forceMagnitude;
+    }
+
+    function applyForces() {
+        for (let i = 0; i < particles.length; i++) {
+            for (let j = i + 1; j < particles.length; j++) {
+                const dx = particles[j].x - particles[i].x;
+                const dy = particles[j].y - particles[i].y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // Apply Lennard-Jones forces if within interaction range
+                if (distance < interactionRange && distance > 0) {
+                    const ljForce = lennardJonesForce(distance);
+                    const fx = ljForce * (dx / distance);
+                    const fy = ljForce * (dy / distance);
+
+                    particles[i].forceX += fx;
+                    particles[i].forceY += fy;
+                    particles[j].forceX -= fx;
+                    particles[j].forceY -= fy;
+                }
+            }
+        }
+    }
+
+    function checkBoundaries(particle) {
+        if (particle.x < particleRadius) {
+            particle.vx *= -1;
+            particle.x = particleRadius;
+        } else if (particle.x > width - particleRadius) {
+            particle.vx *= -1;
+            particle.x = width - particleRadius;
+        }
+
+        if (particle.y < particleRadius) {
+            particle.vy *= -1;
+            particle.y = particleRadius;
+        } else if (particle.y > height - particleRadius) {
+            particle.vy *= -1;
+            particle.y = height - particleRadius;
+        }
+    }
+
+    function updatePositions() {
+        for (let particle of particles) {
+            // Apply forces to update velocity
+            particle.vx += (particle.forceX / particleCount) * dt;
+            particle.vy += (particle.forceY / particleCount) * dt;
+
+            // Update position based on velocity
+            particle.x += particle.vx;
+            particle.y += particle.vy;
+
+            // Check for boundary collisions
+            checkBoundaries(particle);
+
+            // Reset forces for the next frame
+            particle.forceX = 0;
+            particle.forceY = 0;
+        }
+    }
+
+    function animate(delta) {
+        applyForces();
+        updatePositions();
+    }
+
+    init();
+</script>
+
+</body>
+</html>
