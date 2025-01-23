@@ -1,5 +1,5 @@
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as THREE from 'https://unpkg.com/three@latest/build/three.module.js'
+import { OrbitControls } from 'https://unpkg.com/three@0.127.0/examples/jsm/controls/OrbitControls.js'
 
 // -----------------------------------------------------------------------------
 // GLOBAL SIMULATION SETTINGS
@@ -23,26 +23,34 @@ const chargeTypes = [-0.05, 0.0001];
 // -----------------------------------------------------------------------------
 // THREE.js SETUP
 // -----------------------------------------------------------------------------
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
+const container = document.getElementById('simulation-container');
+const width = container.clientWidth;
+const height = container.clientHeight;
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setSize(width, height);
 renderer.setClearColor(0x2b2b2b);
-document.body.appendChild(renderer.domElement);
+container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(
-  75, window.innerWidth / window.innerHeight,
-  0.1, 1000
+  75,           // FOV
+  width/height, // Aspect ratio
+  0.1,
+  1000
 );
-camera.position.set(0, 2, 15);
+camera.position.set(0, 5, 15);  // Move back a bit from the origin
+camera.lookAt(0, 0, 0);         // Ensure the camera looks at the origin
 
 const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.1;
 
 // Optional axes + bounding box
 const axesHelper = new THREE.AxesHelper(5);
 scene.add(axesHelper);
+
 
 const boxGeometry = new THREE.BoxGeometry(5, 5, 5);
 const boxMaterial = new THREE.MeshBasicMaterial({

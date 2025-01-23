@@ -100,7 +100,7 @@ def account():
     image_file = (url_for('static', filename='profile_pics/' + current_user.image_file ))
     return render_template('account.html', image_file=image_file)
 
-@app.route("/simulation", methods=["GET"])
+@app.route("/create", methods=["GET"])
 def simulation():
     return render_template('threemd.html')
 
