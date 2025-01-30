@@ -115,12 +115,22 @@ import * as THREE from 'https://unpkg.com/three@latest/build/three.module.js';
       });
 
       particles.push(newParticle);
-      updateParticleList();
+
+      const particleGrid = document.getElementsByClassName("particle-grid")[0];
+      console.log(particleGrid);
+
+      particles.forEach((particle, index) => {
+        //console.log("Particle mass: " + particle.mass)
+      }) 
     }
 
     document.getElementById('add-particle-button').addEventListener('click', () => {
       addParticle();  
     });
+
+    function particleList() {
+      
+    }
 
     // Position = Position + Velocty*Time
     function moveParticles() {
@@ -162,6 +172,7 @@ import * as THREE from 'https://unpkg.com/three@latest/build/three.module.js';
     function animate() {
       requestAnimationFrame(animate);
       moveParticles();
+      particleList();
       controls.update();
       renderer.render(scene, camera);
     }
