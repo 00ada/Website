@@ -52,7 +52,9 @@ import * as THREE from 'https://unpkg.com/three@latest/build/three.module.js';
 
     // Particle class
     class Particle {
+      static lastID = 0;
       constructor({
+        id,
         x = 0,
         y = 0,
         z = 0,
@@ -64,6 +66,8 @@ import * as THREE from 'https://unpkg.com/three@latest/build/three.module.js';
         radius = 0.3,
         color = defaultColor,
       }) {
+        this.id = id || ++Particle.lastID;
+        
         this.mass = mass;
         this.charge = charge;
         this.radius = radius;
@@ -116,12 +120,18 @@ import * as THREE from 'https://unpkg.com/three@latest/build/three.module.js';
 
       particles.push(newParticle);
 
-      const particleGrid = document.getElementsByClassName("particle-grid")[0];
-      console.log(particleGrid);
+      // Clear the particle grid and display all particles again
+      const particleGrid = document.getElementById("particle-grid");
+      particleGrid.innerHTML = ""; // Clear existing content
 
-      particles.forEach((particle, index) => {
-        //console.log("Particle mass: " + particle.mass)
-      }) 
+      particles.forEach((particle) => {
+      const particleP = document.createElement("p");
+      const particleItem = document.createTextNode(
+      `Particle ${particle.id}: Mass = ${particle.mass}, Charge = ${particle.charge}`
+      );
+      particleP.appendChild(particleItem);
+      particleGrid.appendChild(particleP);
+  });
     }
 
     document.getElementById('add-particle-button').addEventListener('click', () => {
