@@ -1,27 +1,195 @@
 html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background-color: rgb(34,34,34); 
-    font-family: sans-serif;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* Prevents unwanted scrollbars */
+  background-color: rgb(34, 34, 34);
+  font-family: sans-serif;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding-top: 5%;
+}
+
+/* Container for simulation and particle grid */
+#container {
+  display: flex;
+  align-items: flex-start;
+  gap: 60px; /* Proper spacing between simulation and particle grid */
+  width: 90%;
+  max-width: 1400px;
+  padding-left: 3%;
+}
+
+/* Simulation box */
+#simulation-container {
+  width: 450px;
+  height: 450px;
+  border-radius: 25px;
+  overflow: hidden;
+  box-sizing: border-box;
+  background-color: rgb(20, 20, 20);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+/* Ensure Three.js canvas fills the container properly */
+#simulation-container canvas {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+}
+
+/* UI for Energy & Temperature inside simulation box */
+#simulation-ui {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: auto;
+  max-width: 95%;
+  flex-wrap: wrap; /* Wrap UI elements if too cramped */
+  z-index: 10; /* Ensures UI stays on top */
+}
+
+/* Energy & temperature display */
+#simulation-ui p {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* Small temperature slider */
+#temperature-slider {
+  width: 80px;
+  height: 5px;
+  cursor: pointer;
+}
+
+/* Wrapping the button and particle grid */
+#particle-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 650px; /* Slightly increased width */
+}
+
+/* Styled "Add Particle" button */
+#add-particle-button {
+  width: 85%;
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  background-color: rgb(60, 60, 60);
+  color: white;
+  font-size: 16px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.3s ease, transform 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+#add-particle-button:hover {
+  background-color: rgb(80, 80, 80);
+  transform: scale(1.05);
+}
+
+/* Expanded Particle Grid */
+#particle-grid {
+  width: 100%;
+  max-width: 650px; /* Increased width for better spacing */
+  padding: 20px;
+  background-color: rgb(50, 50, 50);
+  border-radius: 15px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  max-height: 500px;
+  overflow-y: auto;
+  overflow-x: hidden; /* Prevents extra horizontal scrolling */
+}
+
+/* Scrollbar Styling */
+#particle-grid::-webkit-scrollbar {
+  width: 8px;
+}
+
+#particle-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#particle-grid::-webkit-scrollbar-thumb {
+  background: rgb(80, 80, 80);
+  border-radius: 6px;
+}
+
+#particle-grid::-webkit-scrollbar-thumb:hover {
+  background: rgb(100, 100, 100);
+}
+
+/* Individual Particle Item */
+.particle-item {
+  background-color: rgb(70, 70, 70);
+  padding: 15px;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  color: white;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Editable inputs for Mass, Charge, and Color */
+.particle-item input {
+  width: 100%;
+  padding: 5px;
+  border: 1px solid rgb(100, 100, 100);
+  border-radius: 5px;
+  background-color: rgb(90, 90, 90);
+  color: white;
+  text-align: center;
+}
+
+/* Color Picker */
+.particle-item input[type="color"] {
+  padding: 0;
+  height: 30px;
+  cursor: pointer;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  #container {
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
   }
 
-  #simulation-container {
-  position: absolute;
-  width: 450px;   
-  height: 450px;  
-  top: 60%;
-  left: 20%;
-  transform: translate(-50%, -50%);
-  border-radius: 25px; 
-  overflow: hidden; 
-  box-sizing: border-box;
+  #particle-section {
+    width: 90%;
   }
 
   #particle-grid {
-    padding-left: 50%
+    grid-template-columns: repeat(3, 1fr);
+    width: 100%;
   }
 
- 
+  #add-particle-button {
+    width: 90%;
+  }
+}
