@@ -104,11 +104,11 @@ import * as THREE from 'https://unpkg.com/three@latest/build/three.module.js';
       const x = (Math.random() - 0.5) * boxSize;
       const y = (Math.random() - 0.5) * boxSize;
       const z = (Math.random() - 0.5) * boxSize;
-
+    
       const vx = (Math.random() - 0.5) * maxVelocity;
       const vy = (Math.random() - 0.5) * maxVelocity;
       const vz = (Math.random() - 0.5) * maxVelocity;
-
+    
       const newParticle = new Particle({
         x, y, z,
         vx, vy, vz,
@@ -117,22 +117,76 @@ import * as THREE from 'https://unpkg.com/three@latest/build/three.module.js';
         radius,
         color: defaultColor,
       });
-
+    
       particles.push(newParticle);
-
-      // Clear the particle grid and display all particles again
+      updateParticleList();
+    }
+    
+    function updateParticleList() {
       const particleGrid = document.getElementById("particle-grid");
       particleGrid.innerHTML = ""; // Clear existing content
-
+    
       particles.forEach((particle) => {
-      const particleP = document.createElement("p");
-      const particleItem = document.createTextNode(
-      `Particle ${particle.id}: Mass = ${particle.mass}, Charge = ${particle.charge}`
-      );
-      particleP.appendChild(particleItem);
-      particleGrid.appendChild(particleP);
-  });
+        const particleDiv = document.createElement("div");
+        particleDiv.className = "particle-item";
+    
+        const particleInfo = document.createElement("p");
+        particleInfo.textContent = `Particle ${particle.id}: Mass = ${particle.mass}, Charge = ${particle.charge}, Color = ${particle.mesh.material.color.getHexString()}`;
+    
+        // Mass input
+        const massInput = document.createElement("input");
+        massInput.type = "number";
+        massInput.value = particle.mass;
+        massInput.placeholder = "Mass";
+        massInput.addEventListener("change", (e) => {
+          newMass = parseFloat(e.target.value);
+          if (isNaN(newMass)) {
+            particle.mass = defaultMass;
+            massInput.value = defaultMass;
+          }
+          else if (newMass <= 0) {
+            particle.mass = 0.1;
+            massInput.value = 0.1;
+          } else {
+            particle.mass = newMass;
+          }
+          updateParticleList();
+        });
+    
+        // Charge input
+        const chargeInput = document.createElement("input");
+        chargeInput.type = "number";
+        chargeInput.value = particle.charge;
+        chargeInput.placeholder = "Charge";
+        chargeInput.addEventListener("change", (e) => {
+          newCharge = parseFloat(e.target.value);
+          if (isNaN(newCharge)) {
+            particle.charge = defaultCharge;
+            chargeInput.value = defaultCharge;
+          } else {
+            particle.charge = newCharge;
+          }
+          updateParticleList();
+        });
+    
+        // Color input
+        const colorInput = document.createElement("input");
+        colorInput.type = "color";
+        colorInput.value = `#${particle.mesh.material.color.getHexString()}`;
+        colorInput.addEventListener("change", (e) => {
+          particle.mesh.material.color.set(e.target.value);
+          updateParticleList();
+        });
+    
+        // Append elements to the particle item
+        particleDiv.appendChild(particleInfo);
+        particleDiv.appendChild(massInput);
+        particleDiv.appendChild(chargeInput);
+        particleDiv.appendChild(colorInput);
+        particleGrid.appendChild(particleDiv);
+      });
     }
+
 
     document.getElementById('add-particle-button').addEventListener('click', () => {
       addParticle();  
