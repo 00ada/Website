@@ -177,24 +177,64 @@ import * as THREE from 'https://unpkg.com/three@latest/build/three.module.js';
           particle.mesh.material.color.set(e.target.value);
           updateParticleList();
         });
-    
-        // Append elements to the particle item
-        particleDiv.appendChild(particleInfo);
-        particleDiv.appendChild(massInput);
-        particleDiv.appendChild(chargeInput);
-        particleDiv.appendChild(colorInput);
-        particleGrid.appendChild(particleDiv);
+
+        // Duplicate button
+    const duplicateButton = document.createElement("button");
+    duplicateButton.textContent = "Duplicate";
+    duplicateButton.className = "duplicate-button"
+    duplicateButton.addEventListener("click", () => {
+      // Create a new particle with the same properties
+      const newParticle = new Particle({
+        x: particle.position.x + 0.5, // Slightly offset to avoid overlap
+        y: particle.position.y + 0.5,
+        z: particle.position.z + 0.5,
+        vx: particle.vx,
+        vy: particle.vy,
+        vz: particle.vz,
+        mass: particle.mass,
+        charge: particle.charge,
+        radius: particle.radius,
+        color: particle.mesh.material.color.getHex(),
       });
-    }
+      particles.push(newParticle);
+      updateParticleList();
+    });
+
+    // Delete button
+    const deleteButton = document.createElement("button");
+    deleteButton.textContent = "Delete";
+    deleteButton.className = "delete-button";
+    deleteButton.addEventListener("click", () => {
+      // Remove the particle from the scene
+      scene.remove(particle.mesh);
+
+      const index = particles.indexOf(particle);
+        if (index !== -1) {
+            particles.splice(index, 1); // Remove the particle from the array
+        }
+
+    // Remove the corresponding HTML element from the particle list
+    particleDiv.remove();
+
+      // Update the particle list
+      updateParticleList();
+    }); 
+    
+    // Append elements to the particle item
+    particleDiv.appendChild(particleInfo);
+    particleDiv.appendChild(massInput);
+    particleDiv.appendChild(chargeInput);
+    particleDiv.appendChild(colorInput);
+    particleDiv.appendChild(duplicateButton);
+    particleDiv.appendChild(deleteButton);
+    particleGrid.appendChild(particleDiv);
+ });
+}
 
 
     document.getElementById('add-particle-button').addEventListener('click', () => {
       addParticle();  
     });
-
-    function particleList() {
-      
-    }
 
     // Move Particles
     function moveParticles() {
@@ -346,7 +386,6 @@ import * as THREE from 'https://unpkg.com/three@latest/build/three.module.js';
       moveParticles();
       LJ_and_Coulomb_forces();
       calculateTotalEnergy();
-      particleList();
       controls.update();
       renderer.render(scene, camera);
     }
