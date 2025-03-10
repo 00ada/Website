@@ -1,9 +1,13 @@
+/* Global styles */
+* {
+  font-family: "karla", sans-serif;
+}
+
 html, body {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
-  overflow: hidden; /* Prevents unwanted scrollbars */
   background-color: rgb(34, 34, 34);
   font-family: sans-serif;
   display: flex;
@@ -16,7 +20,7 @@ html, body {
 #container {
   display: flex;
   align-items: flex-start;
-  gap: 60px; /* Proper spacing between simulation and particle grid */
+  gap: 60px; /* Spacing between simulation container and particle section */
   width: 90%;
   max-width: 1400px;
   padding-left: 3%;
@@ -29,7 +33,7 @@ html, body {
   border-radius: 25px;
   overflow: hidden;
   box-sizing: border-box;
-  background-color: transparent; /* Remove background color */
+  background-color: transparent;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
   position: relative;
 }
@@ -41,9 +45,51 @@ html, body {
   height: 100%;
   top: 0;
   left: 0;
+  z-index: 1; /* Ensure canvas is below the UI */
 }
 
-/* UI for Energy & Temperature inside simulation box */
+/* Controls UI at the top left */
+#controls-container {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: auto;
+  max-width: 95%;
+  flex-wrap: wrap; /* Wrap UI elements if too cramped */
+  z-index: 10; /* Ensure it is above the canvas */
+}
+
+/* Style for labels and inputs inside controls-container */
+#controls-container label {
+  color: white;
+  font-size: 12px;
+}
+
+#controls-container input {
+  width: 60px;
+  padding: 3px;
+  border: 1px solid rgb(100, 100, 100);
+  border-radius: 5px;
+  background-color: rgb(90, 90, 90);
+  color: white;
+  text-align: center;
+}
+
+#controls-container input[type="number"]::-webkit-inner-spin-button,
+#controls-container input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none; /* Remove spinner arrows in Chrome/Safari */
+  margin: 0;
+}
+
+/* Simulation UI at the bottom left */
 #simulation-ui {
   position: absolute;
   bottom: 10px;
@@ -59,7 +105,7 @@ html, body {
   width: auto;
   max-width: 95%;
   flex-wrap: wrap; /* Wrap UI elements if too cramped */
-  z-index: 10; /* Ensures UI stays on top */
+  z-index: 10; /* Ensure it is above the canvas */
 }
 
 /* Energy & temperature display */
@@ -75,7 +121,35 @@ html, body {
   cursor: pointer;
 }
 
-/* Wrapping the button and particle grid */
+/* Container for the "Post" button */
+#post-button-container {
+  position: absolute;
+  bottom: 10px; /* Align to the bottom */
+  right: 10px; /* Align to the right */
+  z-index: 10; /* Ensure it is above the canvas */
+}
+
+/* Styled "Post" button */
+#post-button {
+  padding: 12px 20px;
+  background-color: rgb(60, 60, 60); /* Match the theme color */
+  color: white;
+  font-size: 16px;
+  border: none;
+  border-radius: 15px;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.3s ease, transform 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  width: 150px;
+}
+
+#post-button:hover {
+  background-color: rgb(80, 80, 80); /* Darker shade on hover */
+  transform: scale(1.05); /* Slight scale effect on hover */
+}
+
+/* Particle section */
 #particle-section {
   display: flex;
   flex-direction: column;
@@ -217,4 +291,81 @@ html, body {
 
 .delete-button:hover {
   background-color: #ff4c4c; /* Darker red on hover */
+}
+
+/* Modal styles */
+.modal {
+  display: none; /* Hidden by default */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7); /* Darken the background */
+  z-index: 1000; /* Ensure it's on top of everything */
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  background-color: rgb(50, 50, 50);
+  padding: 20px 35px 20px 20px;
+  border-radius: 10px;
+  width: 400px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  color: white;
+}
+
+.modal-content h2 {
+  margin-top: 0;
+}
+
+.modal-content label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.modal-content input[type="text"],
+.modal-content textarea {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 15px;
+  border: 1px solid rgb(100, 100, 100);
+  border-radius: 5px;
+  background-color: rgb(70, 70, 70);
+  color: white;
+  font-size: 14px;
+}
+
+.modal-content textarea {
+  resize: vertical; /* Allow vertical resizing */
+}
+
+.modal-content button[type="submit"] {
+  padding: 10px 20px;
+  background-color: rgb(60, 60, 60);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.3s ease;
+}
+
+.modal-content button[type="submit"]:hover {
+  background-color: rgb(80, 80, 80);
+}
+
+.close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.close:hover {
+  color: rgb(200, 200, 200);
 }

@@ -59,133 +59,101 @@ h1 {
     font-size: 50px;
 }
 
-.partner-container {
+/* Search Bar */
+.search-bar {
+    margin-bottom: 20px;
+    width: 100%; /* Make the search bar container full width */
+    max-width: 800px; /* Set a max-width for better readability */
     display: flex;
-    align-items: center;
-    box-sizing: border-box;
-    margin-top: 10%;
-    padding-bottom: 0px;
-    height: 100px
+    gap: 10px; /* Add space between input and button */
 }
 
-.partner {
-    margin-right: 10px;
-    margin-bottom: 45px;
+.search-bar input {
+    flex: 1; /* Make the input take up remaining space */
+    padding: 12px;
+    font-size: 16px;
+    border: 1px solid #555;
+    border-radius: 8px;
+    background-color: rgb(50, 50, 50);
+    color: #fff;
+    outline: none;
 }
 
-.articles-container {
+.search-bar input::placeholder {
+    color: #939393;
+}
+
+.search-bar button {
+    padding: 12px 24px;
+    font-size: 16px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.search-bar button:hover {
+    background-color: #0056b3;
+}
+
+/* Post Containers */
+#postsContainer .post-container {
+    margin: 20px 0;
+    padding: 15px; /* Increased padding for more height */
+    border: 1px solid #2b2a2a;
+    border-radius: 8px;
+    background-color: rgb(50, 50, 50);
+    width: 700px; /* Slightly less wide than the search bar */
+    max-width: 720px; /* Slightly less than the search bar's max-width (800px) */
+    min-height: 150px; /* Minimum height to make posts longer */
     display: flex;
     flex-direction: column;
-    align-items: center; 
+    justify-content: space-between; /* Space out content vertically */
 }
 
-.articles {
-    margin-top: 10%;
-    font-size: 8em;
-    text-align: center;
+.post-header {
     display: flex;
-    justify-content: center;
     align-items: center;
-    gap: 20px;
-    width: 1200px;
-    height: 600px;
+    margin-bottom: 15px;
 }
 
-.art-cap {
-    font-size: 20px;
-    font-weight: 500px;
+.post-header img {
+    width: 50px; /* Slightly larger profile picture */
+    height: 50px;
+    border-radius: 50%;
+    margin-right: 15px;
+}
+
+.post-header h3 {
+    margin: 0;
+    font-size: 20px; /* Slightly larger username */
     color: #fff;
-    position: relative;
-    top: 100px;
-    text-align: center;
 }
 
-.article {
-    border-radius: 20px;
-}
-
-.article img {
-    width: 100%;
-    height: 100%; 
-    object-fit: cover; 
-    display: block; 
-    border-radius: 20px;
-}
-
-#art1 {
-    background-color: #dcdcdc;
-    transition-duration: 0.3s;
-    transition-timing-function: ease;
-    width: 608px;
-    height: 608px;
-}
-
-#art1:hover {
-    opacity: 70%;
-    width: 613px;
-    height: 613px
-}
-
-.vertical-articles {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    align-items: center;
-}
-
-#art2 {
-    background-color: #a1a1a1;
-    width: 300px;
-    height: 300px;
-
-    transition-duration: 0.3s;
-    transition-timing-function: ease;
-}
-
-#art2:hover {
-    width: 305px;
-    height: 305px;
-    opacity: 70%;
-}
-
-#art3 {
-    background-color: #787878;
-    width: 300px;
-    height: 300px;
-
-    transition-duration: 0.3s;
-    transition-timing-function: ease;
-}
-
-#art3:hover {
-    width: 305px;
-    height: 305px;
-    opacity: 70%;
-}
-
-.section1 {
-    display: flex;
-    justify-content: space-evenly;
-}
-
-.article-text {
-    font-weight: 800;
-    font-size: 50px;
+.post-title {
+    font-size: 24px; /* Larger title */
+    font-weight: bold;
+    margin-bottom: 10px;
     color: #fff;
-    display: flex;
-    justify-content: center;
-    align-items: center;
 }
 
-#art-text a{
-    text-decoration: none;
-    color: #fff;
-
-    transition-duration: 0.3s;
-    transition-timing-function: ease;
+.post-description {
+    font-size: 18px; /* Larger description */
+    color: #939393;
+    line-height: 1.6; /* Add line height for better readability */
+    margin-bottom: 15px; /* Add space below the description */
 }
 
-#art-text a:hover{
-    color: pink;
-    font-size: 52px;
+.post-link {
+    text-decoration: none; /* Remove underline from the link */
+    color: inherit; /* Inherit text color from parent */
+    display: block; /* Make the link a block element */
+}
+
+.post-link:hover .post-container {
+    background-color: rgb(60, 60, 60); /* Change background color on hover */
+    border-color: #007bff; /* Change border color on hover */
+    transition: background-color 0.3s ease, border-color 0.3s ease; /* Smooth transition */
 }

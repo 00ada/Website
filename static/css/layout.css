@@ -26,6 +26,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    z-index: 10000;
 }
 
 .header .logo {
@@ -33,6 +34,7 @@ body {
     color: #fff;
     text-decoration: none;
     font-weight: 700;
+    z-index: 10000;
 }
 
 .navbar a {

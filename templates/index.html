@@ -2,7 +2,7 @@
 <title>{% block title %}Home{% endblock %}</title>
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='index.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -17,26 +17,76 @@
     {% endif %}
     {% endwith %}
     
-    <div class="partner-container">
-        <img src="static\ovito-logo.png" alt="Company Logo" class="partner" width="85" height="85">
-        <h1>Partnered with OVITO.</h1>
+   <!-- Search Bar -->
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="Search posts...">
+    <button onclick="searchPosts()">Search</button>
+  </div>
+
+  <div id="postsContainer">
+        {% if posts %}
+            {% for post in posts %}
+                <a href="{{ url_for('view_post', post_id=post.id) }}" class="post-link">
+                    <div class="post-container">
+                        <div class="post-header">
+                            <img src="{{ url_for('static', filename='profile_pics/' + post.user_image) }}" alt="{{ post.username }}">
+                            <h3>{{ post.username }}</h3>
+                        </div>
+                        <div class="post-title">{{ post.title }}</div>
+                        <div class="post-description">{{ post.description[:100] }}...</div>
+                    </div>
+                </a>
+            {% endfor %}
+        {% else %}
+            <p>No posts found.</p>
+        {% endif %}
     </div>
 
-    <div class="section1">
-        <div class="articles-container">
-            <div class="art-cap">This weeks top articles.</div>
-            <div class="articles">
-                <div class="article" id="art1"><img src="https://specificpolymers.com/wp-content/uploads/2021/05/shutterstock_1868254759.png" alt="Article 1 Image"></div>
-                <div class="vertical-articles">
-                    <div id="art2" class="article"><img src="https://analyticsindiamag.com/wp-content/uploads/2018/04/Molecular-Dynamics.jpg" alt="Article 2 Image"></div>
-                    <div id="art3" class="article"><img src="https://e1.pxfuel.com/desktop-wallpaper/233/178/desktop-wallpaper-molecular-biology-biology.jpg" alt="Article 3 Image"></div>
-                </div>
+  <script>
+    // Function to fetch and display posts
+    async function fetchPosts(searchQuery = '') {
+      try {
+        const response = await fetch(`/get_posts?search=${searchQuery}`);
+        const posts = await response.json();
+
+        const postsContainer = document.getElementById('postsContainer');
+        postsContainer.innerHTML = ''; // Clear previous posts
+
+        if (posts.length === 0) {
+          postsContainer.innerHTML = '<p>No posts found.</p>';
+          return;
+        }
+
+        posts.forEach(post => {
+          const postElement = document.createElement('div');
+          postElement.className = 'post-container';
+
+          postElement.innerHTML = `
+            <div class="post-header">
+              <img src="{{ url_for('static', filename='profile_pics/') }}${post.user_image}" alt="${post.username}">
+              <h3>${post.username}</h3>
             </div>
-        </div>
-        <div class="article-text">
-            <p id="art-text">Want to browse more <a href="/login">articles</a>?</p>
-        </div>
-    </div>
+            <div class="post-title">${post.title}</div>
+            <div class="post-description">${post.description.substring(0, 100)}...</div>
+          `;
+
+          postsContainer.appendChild(postElement);
+        });
+      } catch (error) {
+        console.error('Error fetching posts:', error);
+        alert('An error occurred while fetching posts.');
+      }
+    }
+
+    // Function to handle search
+    function searchPosts() {
+      const searchQuery = document.getElementById('searchInput').value;
+      fetchPosts(searchQuery);
+    }
+
+    // Fetch posts when the page loads
+    window.onload = fetchPosts;
+  </script>
 {% endblock %}
 
 

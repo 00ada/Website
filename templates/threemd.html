@@ -1,3 +1,7 @@
+{% extends "layout.html" %}
+
+
+{% block content %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,25 +10,49 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/simulation.css') }}">
 </head>
 <body>
-
   <div id="container">
     <div id="simulation-container">
       <!-- Three.js Canvas will be appended here -->
-    
-      <!-- Small UI inside the simulation container -->
+
+      <!-- Controls UI at the top left -->
+      <div id="controls-container">
+      </div>
+
+      <!-- Simulation UI at the bottom left -->
       <div id="simulation-ui">
         <p id="energy-display">E: 0</p>
         <p id="temperature-display">T: 1.0</p>
         <input type="range" id="temperature-slider" min="0.1" max="5.0" step="0.1" value="1">
       </div>
+
+      <!-- "Post" button -->
+      <div id="post-button-container">
+        <button id="post-button">Post</button>
+      </div>
     </div>
-    
+
     <div id="particle-section">
       <button id="add-particle-button">Add Particle</button>
       <div id="particle-grid"></div>
     </div>
+  </div>
 
+  <!-- Modal for posting -->
+  <div id="post-modal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>Create a Post</h2>
+      <form id="post-form">
+        <label for="post-title">Title:</label>
+        <input type="text" id="post-title" name="post-title" required>
+        <label for="post-description">Description:</label>
+        <textarea id="post-description" name="post-description" rows="4" required></textarea>
+        <button type="submit">Submit</button>
+      </form>
+    </div>
+  </div>
 
   <script type="module" src="static/js/newMD.js"></script>
 </body>
 </html>
+{% endblock %}

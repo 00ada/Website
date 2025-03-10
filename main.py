@@ -1,4 +1,4 @@
-from flask import Flask, render_template, url_for, request, redirect, flash, session
+from flask import Flask, render_template, url_for, request, redirect, flash, session, jsonify
 import sqlite3
 from database_wrapper import UserDB
 import hashlib
@@ -11,6 +11,30 @@ app.config['SECRET_KEY']='md-sim'
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
+DATABASE = 'userdata.db'
+
+def get_db_connection():
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db_connection()
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            particle_data TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.get(user_id)
@@ -18,7 +42,23 @@ def load_user(user_id):
 @app.route("/home", methods=["GET", "POST"])
 @app.route("/", methods=["GET", "POST"])
 def home():
-    return render_template('index.html')
+    conn = get_db_connection()
+    try:
+        # Fetch all posts with user details
+        query = '''
+            SELECT posts.id, posts.title, posts.description, users.username, users.image_file as user_image
+            FROM posts
+            JOIN users ON posts.user_id = users.id
+        '''
+        posts = conn.execute(query).fetchall()
+        posts_list = [dict(post) for post in posts]  # Convert to list of dictionaries
+    except Exception as e:
+        print(f"Error fetching posts: {e}")
+        posts_list = []  # Fallback to an empty list if there's an error
+    finally:
+        conn.close()
+
+    return render_template('index.html', posts=posts_list)
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -103,6 +143,78 @@ def account():
 @app.route("/create", methods=["GET"])
 def simulation():
     return render_template('threemd.html')
+
+@app.route("/save_post", methods=["POST"])
+@login_required
+def save_post():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'You must be logged in to save a post. Please log in or create an account.'}), 401
+    
+    data = request.json
+    title = data.get('title')
+    description = data.get('description')
+    particle_data = data.get('particle_data')
+
+    if not title or not description or not particle_data:
+        return jsonify({'error': 'Missing data'}), 400
+
+    conn = get_db_connection()
+    try:
+        conn.execute('''
+            INSERT INTO posts (title, description, particle_data, user_id)
+            VALUES (?, ?, ?, ?)
+        ''', (title, description, particle_data, current_user.id))
+        conn.commit()
+        return jsonify({'message': 'Post saved successfully'}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route("/get_posts", methods=["GET"])
+def get_posts():
+    search_query = request.args.get('search', '')
+
+    conn = get_db_connection()
+    try:
+        # Fetch posts with user details
+        query = '''
+            SELECT posts.id, posts.title, posts.description, users.username, users.image_file as user_image
+            FROM posts
+            JOIN users ON posts.user_id = users.id
+            WHERE posts.title LIKE ? OR posts.description LIKE ?
+        '''
+        posts = conn.execute(query, (f'%{search_query}%', f'%{search_query}%')).fetchall()
+        conn.close()
+
+        # Convert posts to a list of dictionaries
+        posts_list = [dict(post) for post in posts]
+        return jsonify(posts_list)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+@app.route("/post/<int:post_id>")
+def view_post(post_id):
+    conn = get_db_connection()
+    try:
+        # Fetch the specific post with user details
+        query = '''
+            SELECT posts.id, posts.title, posts.description, posts.particle_data, users.username, users.image_file as user_image
+            FROM posts
+            JOIN users ON posts.user_id = users.id
+            WHERE posts.id = ?
+        '''
+        post = conn.execute(query, (post_id,)).fetchone()
+        conn.close()
+
+        if post:
+            # Convert the post to a dictionary
+            post_dict = dict(post)
+            return render_template('view_post.html', post=post_dict)
+        else:
+            return "Post not found.", 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

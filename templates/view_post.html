@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+<title>{% block title %}{{ post.title }}{% endblock %}</title>
+
+{% block content %}
+    <div class="post-container">
+        <div class="post-header">
+            <img src="{{ url_for('static', filename='profile_pics/' + post.user_image) }}" alt="{{ post.username }}">
+            <h3>{{ post.username }}</h3>
+        </div>
+        <div class="post-title">{{ post.title }}</div>
+        <div class="post-description">{{ post.description }}</div>
+        <!-- Add particle data display if needed -->
+        <div class="particle-data">{{ post.particle_data }}</div>
+    </div>
+{% endblock %}
