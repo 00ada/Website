@@ -305,6 +305,7 @@ html, body {
   z-index: 1000; /* Ensure it's on top of everything */
   justify-content: center;
   align-items: center;
+  z-index: 15000;
 }
 
 .modal-content {

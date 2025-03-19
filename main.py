@@ -5,6 +5,9 @@ import hashlib
 from datetime import datetime
 from flask_login import LoginManager, login_user, current_user, logout_user, login_required
 from user_auth import *
+import json
+
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY']='md-sim'
@@ -148,7 +151,7 @@ def simulation():
 @login_required
 def save_post():
     if not current_user.is_authenticated:
-        return jsonify({'error': 'You must be logged in to save a post. Please log in or create an account.'}), 401
+        return jsonify({'error': 'Authentication required'}), 401
     
     data = request.json
     title = data.get('title')
@@ -156,14 +159,20 @@ def save_post():
     particle_data = data.get('particle_data')
 
     if not title or not description or not particle_data:
-        return jsonify({'error': 'Missing data'}), 400
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    try:
+        # Convert particle data to JSON string
+        particle_data_json = json.dumps(particle_data)
+    except TypeError:
+        return jsonify({'error': 'Invalid particle data format'}), 400
 
     conn = get_db_connection()
     try:
         conn.execute('''
             INSERT INTO posts (title, description, particle_data, user_id)
             VALUES (?, ?, ?, ?)
-        ''', (title, description, particle_data, current_user.id))
+        ''', (title, description, particle_data_json, current_user.id))
         conn.commit()
         return jsonify({'message': 'Post saved successfully'}), 201
     except Exception as e:
@@ -197,24 +206,30 @@ def get_posts():
 def view_post(post_id):
     conn = get_db_connection()
     try:
-        # Fetch the specific post with user details
         query = '''
-            SELECT posts.id, posts.title, posts.description, posts.particle_data, users.username, users.image_file as user_image
+            SELECT posts.id, posts.title, posts.description, posts.particle_data, 
+                   users.username, users.image_file as user_image
             FROM posts
             JOIN users ON posts.user_id = users.id
             WHERE posts.id = ?
         '''
         post = conn.execute(query, (post_id,)).fetchone()
+        
+        if not post:
+            return "Post not found.", 404
+
+        # Convert to dict and parse JSON
+        post_dict = dict(post)
+        post_dict['particle_data'] = json.loads(post_dict['particle_data'])
+
+        return render_template('view_post.html', post=post_dict)
+    except json.JSONDecodeError:
+        return "Invalid particle data in post", 500
+    except Exception as e:
+        return f"Error loading post: {str(e)}", 500
+    finally:
         conn.close()
 
-        if post:
-            # Convert the post to a dictionary
-            post_dict = dict(post)
-            return render_template('view_post.html', post=post_dict)
-        else:
-            return "Post not found.", 404
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

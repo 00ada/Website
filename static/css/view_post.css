@@ -1,0 +1,97 @@
+/* General styles */
+* {
+    font-family: "karla", sans-serif;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    min-height: 100vh;
+    background-color: rgb(34, 34, 34); /* Dark grey background */
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #fff; /* Light text color for contrast */
+}
+
+/* Container for the post */
+.view-post-container {
+    background-color: #2b2b2b; /* Slightly lighter dark grey for the container */
+    padding: 20px;
+    border-radius: 10px;
+    width: 100%;
+    max-width: 800px; /* Adjust width as needed */
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 20px; /* Space between sections */
+}
+
+/* Profile section */
+.post-profile {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.post-profile-image {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%; /* Makes the image circular */
+    object-fit: cover;
+    border: 3px solid #555; /* Border around the profile image */
+    margin-right: 20px;
+}
+
+.post-profile-username {
+    font-size: 24px;
+    font-weight: bold;
+    color: #fff;
+}
+
+/* Simulation container */
+.simulation-container {
+    width: 450px;
+    height: 450px;
+    background-color: #333; /* Dark grey background for the simulation */
+    border-radius: 10px;
+    border: 2px solid #555; /* Border around the simulation container */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.simulation-container p {
+    font-size: 18px;
+    color: #bbb; /* Light grey text for placeholder */
+}
+
+/* Description section */
+.post-description {
+    font-size: 18px;
+    color: #bbb; /* Light grey for the description text */
+    line-height: 1.6; /* Improve readability */
+    margin-left: 20px; /* Space between simulation and description */
+}
+
+/* Flex container for simulation and description */
+.post-content {
+    display: flex;
+    align-items: flex-start; /* Align items to the top */
+}
+
+.back-button {
+    display: inline-block;
+    margin: 20px;
+    padding: 10px 20px;
+    background-color: #007bff;
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: background-color 0.3s ease;
+}

@@ -132,13 +132,6 @@ h1 {
     color: #fff;
 }
 
-.post-title {
-    font-size: 24px; /* Larger title */
-    font-weight: bold;
-    margin-bottom: 10px;
-    color: #fff;
-}
-
 .post-description {
     font-size: 18px; /* Larger description */
     color: #939393;
@@ -146,14 +139,21 @@ h1 {
     margin-bottom: 15px; /* Add space below the description */
 }
 
-.post-link {
-    text-decoration: none; /* Remove underline from the link */
-    color: inherit; /* Inherit text color from parent */
-    display: block; /* Make the link a block element */
+.post-title {
+    font-size: 24px; /* Larger title */
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #fff; /* Default title color */
+    text-decoration: none; /* Remove underline */
+    background: none; /* Remove button background */
+    border: none; /* Remove button border */
+    padding: 0; /* Remove button padding */
+    cursor: pointer; /* Change cursor to pointer on hover */
+    display: inline-block; /* Make the button inline */
+    text-align: left; /* Align text to the left */
 }
 
-.post-link:hover .post-container {
-    background-color: rgb(60, 60, 60); /* Change background color on hover */
-    border-color: #007bff; /* Change border color on hover */
-    transition: background-color 0.3s ease, border-color 0.3s ease; /* Smooth transition */
+.post-title:hover {
+    color: #ccc; /* Change title color to grey on hover */
+    transition: color 0.3s ease; /* Smooth transition */
 }

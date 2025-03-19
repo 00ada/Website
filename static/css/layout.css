@@ -21,7 +21,7 @@ body {
     top: 0;
     left: 0;
     width: 100%;
-    padding: 40px 150px;
+    padding: 20px 100px;
     background-image: linear-gradient(rgb(18, 18, 18), rgb(34, 34, 34));
     display: flex;
     justify-content: space-between;

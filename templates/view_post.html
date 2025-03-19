@@ -1,15 +1,33 @@
 {% extends "layout.html" %}
 <title>{% block title %}{{ post.title }}{% endblock %}</title>
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/view_post.css') }}">
+{% endblock %}
+
 {% block content %}
-    <div class="post-container">
-        <div class="post-header">
-            <img src="{{ url_for('static', filename='profile_pics/' + post.user_image) }}" alt="{{ post.username }}">
-            <h3>{{ post.username }}</h3>
-        </div>
-        <div class="post-title">{{ post.title }}</div>
-        <div class="post-description">{{ post.description }}</div>
-        <!-- Add particle data display if needed -->
-        <div class="particle-data">{{ post.particle_data }}</div>
+<a href="{{ url_for('home') }}" class="back-button">Back to Home</a>
+<div class="view-post-container">
+    <div class="post-profile">
+        <img src="{{ url_for('static', filename='profile_pics/' + post.user_image) }}" 
+             alt="{{ post.username }}" 
+             class="post-profile-image">
+        <div class="post-profile-username">{{ post.username }}</div>
     </div>
+
+    <div class="post-content">
+        <!-- Corrected data attribute with proper JSON serialization -->
+        <div id="simulation-container" 
+             class="simulation-container"
+             data-particle-data="{{ post.particle_data | tojson | safe }}">
+        </div>
+
+        <div class="post-description">
+            <h2>{{ post.title }}</h2>
+            <p>{{ post.description }}</p>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/view_post.js') }}" type="module"></script>
 {% endblock %}
