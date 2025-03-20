@@ -21,8 +21,11 @@
       <!-- Simulation UI at the bottom left -->
       <div id="simulation-ui">
         <p id="energy-display">E: 0</p>
-        <p id="temperature-display">T: 1.0</p>
-        <input type="range" id="temperature-slider" min="0.1" max="5.0" step="0.1" value="1">
+        <div id="temperature-control">
+          <label for="temperature-slider">T: </label>
+          <input type="range" id="temperature-slider" min="0" max="500" value="500" step="1">
+          <span id="temperature-value">500</span>
+        </div>
       </div>
 
       <!-- "Post" button -->

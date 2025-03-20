@@ -99,6 +99,43 @@ class Particle {
   }
 }
 
+// Bond class
+class Bond {
+  constructor(particle1, particle2, restLength = 1.0, springConstant = 10.0) {
+    this.particle1 = particle1; // Reference to the first particle
+    this.particle2 = particle2; // Reference to the second particle
+    this.restLength = restLength; // Rest length of the bond
+    this.springConstant = springConstant; // Spring constant (stiffness)
+  }
+
+  // Calculate the elastic force and apply it to the bonded particles
+  applyBondForce() {
+    const dx = this.particle2.position.x - this.particle1.position.x;
+    const dy = this.particle2.position.y - this.particle1.position.y;
+    const dz = this.particle2.position.z - this.particle1.position.z;
+
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const displacement = distance - this.restLength;
+
+    // Hooke's Law: F = -k * x
+    const forceMagnitude = this.springConstant * displacement;
+
+    // Force components
+    const fx = (dx / distance) * forceMagnitude;
+    const fy = (dy / distance) * forceMagnitude;
+    const fz = (dz / distance) * forceMagnitude;
+
+    // Apply forces to the particles (Newton's 3rd law)
+    this.particle1.fx += fx;
+    this.particle1.fy += fy;
+    this.particle1.fz += fz;
+
+    this.particle2.fx -= fx;
+    this.particle2.fy -= fy;
+    this.particle2.fz -= fz;
+  }
+}
+
 const particles = [];
 
 // Add Particle function: Responsible for adding and assigning each particle with random
@@ -365,25 +402,49 @@ function calculateTotalEnergy() {
   document.getElementById("energy-display").textContent = `Energy: ${kineticEnergy.toFixed(2)}`;
 }
 
-function applyThermostat(targetTemperature) {
-  let kineticEnergy = 0;
-  for (const p of particles) {
-    kineticEnergy += 0.5 * p.mass * (p.vx ** 2 + p.vy ** 2 + p.vz ** 2);
+// Langevin Thermostat
+function applyLangevinThermostat(targetTemperature, damping = 0.1) {
+  if (targetTemperature <= 0) {
+    // At 0K, freeze all particle motion
+    for (const p of particles) {
+      p.vx = 0;
+      p.vy = 0;
+      p.vz = 0;
+    }
+    return;
   }
 
-  const currentTemperature = (2 * kineticEnergy) / (3 * particles.length);
-  const scaleFactor = Math.sqrt(targetTemperature / currentTemperature);
+  const k_B = 1.0; // Simplified Boltzmann constant (scaled for simulation)
+  const gamma = damping; // Damping coefficient
+  const sigma = Math.sqrt((2 * gamma * k_B * targetTemperature) / dt);
 
   for (const p of particles) {
-    p.vx *= scaleFactor;
-    p.vy *= scaleFactor;
-    p.vz *= scaleFactor;
+    // Random force (Gaussian noise)
+    const randomForceX = sigma * (Math.random() - 0.5);
+    const randomForceY = sigma * (Math.random() - 0.5);
+    const randomForceZ = sigma * (Math.random() - 0.5);
+
+    // Damping force (proportional to velocity)
+    p.fx -= gamma * p.vx + randomForceX;
+    p.fy -= gamma * p.vy + randomForceY;
+    p.fz -= gamma * p.vz + randomForceZ;
   }
 }
 
-document.getElementById("temperature-slider").addEventListener("input", (e) => {
-  applyThermostat(parseFloat(e.target.value));
+// Update temperature slider value display
+const temperatureSlider = document.getElementById("temperature-slider");
+const temperatureValue = document.getElementById("temperature-value");
+
+temperatureSlider.min = 0;
+temperatureSlider.max = 500;
+temperatureSlider.value = 10; // Default temperature
+temperatureValue.textContent = temperatureSlider.value;
+
+temperatureSlider.addEventListener("input", (e) => {
+  const value = parseFloat(e.target.value);
+  temperatureValue.textContent = value.toFixed(1);
 });
+
 
 // Add epsilon and sigma controls
 const epsilonInput = document.createElement("input");
@@ -439,14 +500,20 @@ controlsContainer.appendChild(sigmaLabel);
 // Animation loop
 function animate() {
   requestAnimationFrame(animate);
+
+  const targetTemperature = parseFloat(temperatureSlider.value);
+  applyLangevinThermostat(targetTemperature);
+
   moveParticles();
   LJ_and_Coulomb_forces();
   calculateTotalEnergy();
+
   controls.update();
   renderer.render(scene, camera);
 }
 
 animate();
+
 
 // Get references to the modal and button
 const postButton = document.getElementById("post-button");
@@ -529,4 +596,3 @@ postForm.addEventListener("submit", async (event) => {
       alert('An error occurred while saving the post.');
     }
   });
-
