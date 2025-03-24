@@ -1,28 +1,28 @@
-import * as THREE from 'https://unpkg.com/three@latest/build/three.module.js'
-import { OrbitControls } from 'https://unpkg.com/three@0.127.0/examples/jsm/controls/OrbitControls.js'
+import * as THREE from 'https://unpkg.com/three@latest/build/three.module.js';
+import { OrbitControls } from 'https://unpkg.com/three@0.127.0/examples/jsm/controls/OrbitControls.js';
+import { LineBasicMaterial, BufferGeometry, Line } from 'https://unpkg.com/three@latest/build/three.module.js';
 
-// -----------------------------------------------------------------------------
-// GLOBAL SIMULATION SETTINGS
-// -----------------------------------------------------------------------------
-const particleCount = 30;
+// Global simulation settings:
 const dt = 0.005;
 const radius = 0.3;
-const maxVelocity = 2.0;
-const maxForce = 10.0;
+const maxVelocity = 10.0;
+const maxForce = 40.0;
+const boxSize = 5;
 
-let T = 0.1;          // Thermostat target temperature
-const mass = 1.0;     // Default mass if user doesn't specify
+const defaultMass = 1.0;
+const defaultCharge = 0.0;
+const defaultColor = 0xffffff;
 
-const eps = 1.0;
-const sig = 1.0;
-const kCoulomb = 1.38e-23; // Coulomb constant factor (for demonstration)
+let selectedParticles = [];
+let bonds = [];
 
-// Available charge types (you can let a user pick from a UI)
-const chargeTypes = [-0.05, 0.0001];
 
-// -----------------------------------------------------------------------------
-// THREE.js SETUP
-// -----------------------------------------------------------------------------
+
+// Lennard-Jones parameters (globally adjustable)
+let eps = 0.5; // Depth of the potential well
+let sig = 0.5; // Finite distance at which inter-particle potential is zero
+
+// THREE.JS Render setup
 const container = document.getElementById('simulation-container');
 const width = container.clientWidth;
 const height = container.clientHeight;
@@ -34,25 +34,23 @@ container.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(
-  75,           // FOV
-  width/height, // Aspect ratio
+  75,
+  width / height,
   0.1,
   1000
 );
-camera.position.set(0, 5, 15);  // Move back a bit from the origin
-camera.lookAt(0, 0, 0);         // Ensure the camera looks at the origin
+camera.position.set(0, 5, 15);
+camera.lookAt(0, 0, 0);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.1;
 
-// Optional axes + bounding box
 const axesHelper = new THREE.AxesHelper(5);
 scene.add(axesHelper);
 
-
-const boxGeometry = new THREE.BoxGeometry(5, 5, 5);
+const boxGeometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
 const boxMaterial = new THREE.MeshBasicMaterial({
   color: 0xffffff,
   wireframe: true,
@@ -62,424 +60,747 @@ const boxMaterial = new THREE.MeshBasicMaterial({
 const box = new THREE.Mesh(boxGeometry, boxMaterial);
 scene.add(box);
 
-// -----------------------------------------------------------------------------
-// PARTICLE CLASS & ARRAYS
-// -----------------------------------------------------------------------------
-
-/**
- * Particle class to store all relevant properties.
- */
+// Particle class
 class Particle {
+  static lastID = 0;
   constructor({
-    x = 0, 
-    y = 0, 
-    z = 0, 
-    vx = 0, 
-    vy = 0, 
+    id,
+    x = 0,
+    y = 0,
+    z = 0,
+    vx = 0,
+    vy = 0,
     vz = 0,
-    mass = 1.0,
-    charge = 0.0,
+    mass = defaultMass,
+    charge = defaultCharge,
     radius = 0.3,
-    color = 0xff0000,  // default red
+    color = defaultColor,
   }) {
+    this.id = id || ++Particle.lastID;
+
     this.mass = mass;
     this.charge = charge;
     this.radius = radius;
 
-    // Position
     this.position = new THREE.Vector3(x, y, z);
 
-    // Velocity
     this.vx = vx;
     this.vy = vy;
     this.vz = vz;
 
-    // Force (accumulator)
     this.fx = 0;
     this.fy = 0;
     this.fz = 0;
 
-    // THREE.js mesh
     const geom = new THREE.SphereGeometry(radius, 16, 16);
-    const mat  = new THREE.MeshBasicMaterial({ color });
-    this.mesh  = new THREE.Mesh(geom, mat);
+    const mat = new THREE.MeshBasicMaterial({ color });
+    this.mesh = new THREE.Mesh(geom, mat);
 
-    // Put the mesh at the initial position
     this.mesh.position.set(x, y, z);
     scene.add(this.mesh);
   }
 
-  // Helper to update the THREE.Mesh position from this.position
   syncMeshPosition() {
-    this.mesh.position.set(
-      this.position.x,
-      this.position.y,
-      this.position.z
-    );
+    this.mesh.position.set(this.position.x, this.position.y, this.position.z);
+  }
+
+    updateRadius(newRadius) {
+    this.radius = newRadius;
+    this.mesh.scale.set(newRadius, newRadius, newRadius);
   }
 }
 
-// Global arrays
-const particles = [];    // Array<Particle>
-const bonds = [];        // e.g. [{ i: number, j: number, r0: number, kSpring: number }, ...]
-let pairDistances = [];  // 2D array or 1D array to store distances among pairs
+class SpatialGrid {
+  constructor(boxSize, cellSize) {
+    this.boxSize = boxSize;
+    this.cellSize = cellSize;
+    this.grid = new Map();
+  }
 
-// -----------------------------------------------------------------------------
-// CREATE PARTICLES (initially random) - DEMO
-// In a real UI, you'd have a function `addParticle(params)` and let the user
-// specify mass, charge, color, etc. We'll just auto-generate for now.
-// -----------------------------------------------------------------------------
-function createParticles() {
-  while (particles.length < particleCount) {
-    const charge = chargeTypes[Math.floor(Math.random() * chargeTypes.length)];
-    const color  = (charge === -0.05) ? 0x0000ff : 0xff0000;
+  getCellKey(x, y, z) {
+    const i = Math.floor((x + this.boxSize / 2) / this.cellSize);
+    const j = Math.floor((y + this.boxSize / 2) / this.cellSize);
+    const k = Math.floor((z + this.boxSize / 2) / this.cellSize);
+    return `${i},${j},${k}`;
+  }
 
-    // Random position in ±4 range
-    const x = (Math.random() - 0.5) * 8;
-    const y = (Math.random() - 0.5) * 8;
-    const z = (Math.random() - 0.5) * 8;
+  addParticle(particle) {
+    const key = this.getCellKey(particle.position.x, particle.position.y, particle.position.z);
+    if (!this.grid.has(key)) this.grid.set(key, []);
+    this.grid.get(key).push(particle);
+  }
 
-    // Check overlap
-    let overlaps = false;
-    for (const p of particles) {
-      const dx = p.position.x - x;
-      const dy = p.position.y - y;
-      const dz = p.position.z - z;
-      const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-      if (dist < 2*radius) {
-        overlaps = true;
-        break;
+  clear() {
+    this.grid.clear();
+  }
+
+  getNeighbors(particle) {
+    const key = this.getCellKey(particle.position.x, particle.position.y, particle.position.z);
+    const [i, j, k] = key.split(',').map(Number);
+    const neighbors = [];
+
+    for (let di = -1; di <= 1; di++) {
+      for (let dj = -1; dj <= 1; dj++) {
+        for (let dk = -1; dk <= 1; dk++) {
+          const neighborKey = `${i + di},${j + dj},2${k + dk}`;
+          if (this.grid.has(neighborKey)) {
+            neighbors.push(...this.grid.get(neighborKey));
+          }
+        }
       }
     }
-    if (overlaps) continue;
 
-    const vx = (Math.random()-0.5)*0.5;
-    const vy = (Math.random()-0.5)*0.5;
-    const vz = (Math.random()-0.5)*0.5;
-
-    const newParticle = new Particle({
-      x, y, z,
-      vx, vy, vz,
-      mass: 1.0,
-      charge,
-      radius,
-      color
-    });
-    particles.push(newParticle);
+    return neighbors;
   }
 }
 
-/**
- * Example of how you'd let a user add a new Particle from a UI:
- * function addParticleFromUI(params) {
- *   const p = new Particle({...params});
- *   particles.push(p);
- * }
- */
+// Initialize grid
+const cellSize = 2 * radius;
+const spatialGrid = new SpatialGrid(boxSize, cellSize);
 
-// -----------------------------------------------------------------------------
-// BONDING - Optional: user can pick which particles to bond
-// For demonstration, let's define an empty bonds array now.
-// In a UI, the user might call e.g. addBond(i, j, 1.0, 100)...
-// -----------------------------------------------------------------------------
-
-function addBond(i, j, r0, kSpring) {
-  bonds.push({ i, j, r0, kSpring });
+function updateGrid() {
+  spatialGrid.clear();
+  particles.forEach(p => spatialGrid.addParticle(p));
 }
 
-/**
- * Example usage:
- * addBond(0, 1, 1.0, 100.0);
- * addBond(1, 2, 1.0, 100.0);
- * etc.
- */
+// ======================== SPRING BOND CLASS ========================
+class SpringBond {
+  constructor(particle1, particle2) {
+    if (!particle1 || !particle2) {
+      console.error("Invalid particles for bond creation");
+      return;
+    }
 
-// -----------------------------------------------------------------------------
-// FORCE CALCULATIONS
-// -----------------------------------------------------------------------------
+    this.particle1 = particle1;
+    this.particle2 = particle2;
+    this.springConstant = 1300;
+    this.restLength = particle1.position.distanceTo(particle2.position);
 
-function resetForces() {
+    // Safer line initialization
+    this.lineMaterial = new LineBasicMaterial({ color: 0x00ff00 });
+    this.lineGeometry = new BufferGeometry();
+    this.line = new Line(this.lineGeometry, this.lineMaterial);
+    this.updateVisual();
+    scene.add(this.line);
+  }
+
+  applyForce() {
+    try {
+      const dx = this.particle2.position.x - this.particle1.position.x;
+      const dy = this.particle2.position.y - this.particle1.position.y;
+      const dz = this.particle2.position.z - this.particle1.position.z;
+      
+      const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      if (distance === 0) return;
+
+      const displacement = distance - this.restLength;
+      const forceMagnitude = this.springConstant * displacement;
+
+      const fx = (dx / distance) * forceMagnitude;
+      const fy = (dy / distance) * forceMagnitude;
+      const fz = (dz / distance) * forceMagnitude;
+
+      this.particle1.fx += fx;
+      this.particle1.fy += fy;
+      this.particle1.fz += fz;
+
+      this.particle2.fx -= fx;
+      this.particle2.fy -= fy;
+      this.particle2.fz -= fz;
+    } catch (error) {
+      console.error("Error applying bond force:", error);
+    }
+  }
+
+  updateVisual() {
+    try {
+      const positions = new Float32Array([
+        this.particle1.position.x, this.particle1.position.y, this.particle1.position.z,
+        this.particle2.position.x, this.particle2.position.y, this.particle2.position.z
+      ]);
+      this.lineGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      this.lineGeometry.attributes.position.needsUpdate = true;
+    } catch (error) {
+      console.error("Error updating bond visual:", error);
+    }
+  }
+
+  remove() {
+    try {
+      scene.remove(this.line);
+      this.lineGeometry.dispose();
+      this.lineMaterial.dispose();
+    } catch (error) {
+      console.error("Error removing bond:", error);
+    }
+  }
+}
+
+function gaussianRandom(mean = 0, stdev = 1) {
+  const u = 1 - Math.random();
+  const v = Math.random();
+  const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  return z * stdev + mean;
+}
+
+// ==================== SELECTION MANAGEMENT ====================
+function toggleSelection(particle) {
+  const index = selectedParticles.indexOf(particle);
+  if(index === -1) {
+    if(selectedParticles.length < 2) {
+      selectedParticles.push(particle);
+      particle.mesh.material.color.set(0xff0000); // Red for selected
+    }
+  } else {
+    selectedParticles.splice(index, 1);
+    particle.mesh.material.color.set(defaultColor);
+  }
+  
+  if(selectedParticles.length === 2) {
+    const bond = new SpringBond(selectedParticles[0], selectedParticles[1]);
+    bonds.push(bond);
+    
+    // Reset selection
+    selectedParticles.forEach(p => p.mesh.material.color.set(defaultColor));
+    selectedParticles = [];
+  }
+  updateParticleList();
+}
+
+const particles = [];
+
+
+// Add Particle function: Responsible for adding and assigning each particle with random
+// position and velocity, and setting a default mass, charge and colour
+function addParticle({ x, y, z, vx, vy, vz, mass = defaultMass, charge = defaultCharge, radius = 0.3, color = defaultColor }) {
+  const newParticle = new Particle({
+    x, y, z,
+    vx, vy, vz,
+    mass,
+    charge,
+    radius,
+    color,
+  });
+
+  particles.push(newParticle);
+  updateParticleList();
+}
+
+function updateParticleList() {
+  const particleGrid = document.getElementById("particle-grid");
+  particleGrid.innerHTML = ""; // Clear existing content
+
+  particles.forEach((particle) => {
+    const particleDiv = document.createElement("div");
+    particleDiv.className = "particle-item";
+
+    const particleInfo = document.createElement("p");
+    particleInfo.textContent = `Particle ${particle.id}: Mass = ${particle.mass}, Charge = ${particle.charge}, Color = ${particle.mesh.material.color.getHexString()}`;
+
+    // Mass input
+    const massInput = document.createElement("input");
+    massInput.type = "number";
+    massInput.value = particle.mass;
+    massInput.placeholder = "Mass";
+    massInput.addEventListener("change", (e) => {
+      const newMass = parseFloat(e.target.value);
+      if (isNaN(newMass)) {
+        particle.mass = defaultMass;
+        massInput.value = defaultMass;
+      } else if (newMass <= 0) {
+        particle.mass = 0.1;
+        massInput.value = 0.1;
+      } else {
+        particle.mass = newMass;
+      }
+      updateParticleList();
+    });
+
+    // Charge input
+    const chargeInput = document.createElement("input");
+    chargeInput.type = "number";
+    chargeInput.value = particle.charge;
+    chargeInput.placeholder = "Charge";
+    chargeInput.addEventListener("change", (e) => {
+      const newCharge = parseFloat(e.target.value);
+      if (isNaN(newCharge)) {
+        particle.charge = defaultCharge;
+        chargeInput.value = defaultCharge;
+      } else {
+        particle.charge = newCharge;
+      }
+      updateParticleList();
+    });
+
+    // Color input
+    const colorInput = document.createElement("input");
+    colorInput.type = "color";
+    colorInput.value = `#${particle.mesh.material.color.getHexString()}`;
+    colorInput.addEventListener("change", (e) => {
+      particle.mesh.material.color.set(e.target.value);
+      updateParticleList();
+    });
+
+    // Add this button creation code right after creating colorInput
+    const selectButton = document.createElement("button");
+    selectButton.textContent = "Select";
+    selectButton.className = "select-button";
+    selectButton.addEventListener("click", () => toggleSelection(particle));
+
+    // Duplicate button
+    const duplicateButton = document.createElement("button");
+    duplicateButton.textContent = "Duplicate";
+    duplicateButton.className = "duplicate-button";
+    duplicateButton.addEventListener("click", () => {
+      // Create a new particle with the same properties
+      addParticle({
+        x: particle.position.x + 0.5, // Slightly offset to avoid overlap
+        y: particle.position.y + 0.5,
+        z: particle.position.z + 0.5,
+        vx: particle.vx,
+        vy: particle.vy,
+        vz: particle.vz,
+        mass: particle.mass,
+        charge: particle.charge,
+        radius: particle.radius,
+        color: particle.mesh.material.color.getHex(),
+      });
+    });
+
+    // Delete button
+    const deleteButton = document.createElement("button");
+    deleteButton.textContent = "Delete";
+    deleteButton.className = "delete-button";
+    deleteButton.addEventListener("click", () => {
+      // Remove the particle from the scene
+      scene.remove(particle.mesh);
+
+      const index = particles.indexOf(particle);
+      if (index !== -1) {
+        particles.splice(index, 1); // Remove the particle from the array
+      }
+
+      // Remove the corresponding HTML element from the particle list
+      particleDiv.remove();
+
+      // Update the particle list
+      updateParticleList();
+    });
+
+    // Append elements to the particle item
+    particleDiv.appendChild(particleInfo);
+    particleDiv.appendChild(massInput);
+    particleDiv.appendChild(chargeInput);
+    particleDiv.appendChild(colorInput);
+    particleDiv.appendChild(selectButton);
+    particleDiv.appendChild(duplicateButton);
+    particleDiv.appendChild(deleteButton);
+    particleGrid.appendChild(particleDiv);
+    
+  });
+}
+
+document.getElementById('add-particle-button').addEventListener('click', () => {
+  const halfBoxSize = boxSize / 2;
+  const x = (Math.random() - 0.5) * boxSize;
+  const y = (Math.random() - 0.5) * boxSize;
+  const z = (Math.random() - 0.5) * boxSize;
+
+  const vx = (Math.random() - 0.5) * maxVelocity;
+  const vy = (Math.random() - 0.5) * maxVelocity;
+  const vz = (Math.random() - 0.5) * maxVelocity;
+
+  addParticle({
+    x, y, z,
+    vx, vy, vz,
+    mass: defaultMass,
+    charge: defaultCharge,
+    radius,
+    color: defaultColor,
+  });
+});
+
+// Move Particles
+function moveParticles() {
   for (const p of particles) {
-    p.fx = 0;
-    p.fy = 0;
-    p.fz = 0;
+    // Update velocity based on force and mass (F = ma => a = F/m)
+    p.vx += (p.fx / p.mass) * dt;
+    p.vy += (p.fy / p.mass) * dt;
+    p.vz += (p.fz / p.mass) * dt;
+
+    // Clamp velocity to prevent unrealistic speeds
+    const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy + p.vz * p.vz);
+    if (speed > maxVelocity) {
+      const scale = maxVelocity / speed;
+      p.vx *= scale;
+      p.vy *= scale;
+      p.vz *= scale;
+    }
+
+    // Update position based on velocity
+    p.position.x += p.vx * dt;
+    p.position.y += p.vy * dt;
+    p.position.z += p.vz * dt;
+
+    // Boundary collision (reflect particles off the walls)
+    if (p.position.x > boxSize / 2) {
+      p.position.x = boxSize / 2;
+      p.vx *= -1;
+    } else if (p.position.x < -boxSize / 2) {
+      p.position.x = -boxSize / 2;
+      p.vx *= -1;
+    }
+
+    if (p.position.y > boxSize / 2) {
+      p.position.y = boxSize / 2;
+      p.vy *= -1;
+    } else if (p.position.y < -boxSize / 2) {
+      p.position.y = -boxSize / 2;
+      p.vy *= -1;
+    }
+
+    if (p.position.z > boxSize / 2) {
+      p.position.z = boxSize / 2;
+      p.vz *= -1;
+    } else if (p.position.z < -boxSize / 2) {
+      p.position.z = -boxSize / 2;
+      p.vz *= -1;
+    }
+
+    // Sync particle mesh position
+    p.syncMeshPosition();
   }
 }
 
 function LJ_and_Coulomb_forces() {
-  // We also update pairDistances[][] here
-  // Initialize/resize pairDistances
-  const N = particles.length;
-  pairDistances = Array.from({ length: N }, () => new Array(N).fill(0));
+  const k = 8.99 * 10 ** 9;
 
-  for (let i = 0; i < N; i++) {
-    for (let j = i+1; j < N; j++) {
-      const pi = particles[i];
-      const pj = particles[j];
+  // Reset forces
+  particles.forEach(p => {
+    p.fx = 0;
+    p.fy = 0;
+    p.fz = 0;
+  });
 
-      const dx = pi.position.x - pj.position.x;
-      const dy = pi.position.y - pj.position.y;
-      const dz = pi.position.z - pj.position.z;
-      const r2 = dx*dx + dy*dy + dz*dz;
-      if (r2 < 1e-6) continue;
+  // Update grid
+  updateGrid();
+
+  // Calculate forces using grid
+  particles.forEach(p => {
+    const neighbors = spatialGrid.getNeighbors(p);
+    neighbors.forEach(neighbor => {
+      if (neighbor.id <= p.id) return;
+
+      const dx = p.position.x - neighbor.position.x;
+      const dy = p.position.y - neighbor.position.y;
+      const dz = p.position.z - neighbor.position.z;
+
+      const r2 = dx * dx + dy * dy + dz * dz;
+      if (r2 < 1e-6) return;
 
       const r = Math.sqrt(r2);
-      // Store distance
-      pairDistances[i][j] = r;
-      pairDistances[j][i] = r;
 
       // Lennard-Jones
-      const sigma6  = Math.pow(sig, 6);
+      const sigma6 = Math.pow(sig, 6);
       const sigma12 = Math.pow(sig, 12);
-      const r6      = Math.pow(r, 6);
-      const r12     = r6 * r6;
-
-      const ljMag = 24 * eps * ((2 * sigma12/(r12*r)) - (sigma6/(r6*r)));
+      const r6 = Math.pow(r, 6);
+      const r12 = r6 * r6;
+      const ljForceMag = 24 * eps * ((2 * sigma12 / (r12 * r)) - (sigma6 / (r6 * r)));
 
       // Coulomb
-      const coulombMag = (kCoulomb * pi.charge * pj.charge) / r2;
+      const coulombForceMag = (k * p.charge * neighbor.charge) / r2;
 
-      let combined = ljMag + coulombMag;
-
-      // clamp
-      if (combined > maxForce)  combined = maxForce;
+      let combined = ljForceMag + coulombForceMag;
+      if (combined > maxForce) combined = maxForce;
       if (combined < -maxForce) combined = -maxForce;
 
       const fx = combined * (dx / r);
       const fy = combined * (dy / r);
       const fz = combined * (dz / r);
 
-      // apply
-      pi.fx += fx;
-      pi.fy += fy;
-      pi.fz += fz;
+      p.fx += fx;
+      p.fy += fy;
+      p.fz += fz;
 
-      pj.fx -= fx;
-      pj.fy -= fy;
-      pj.fz -= fz;
+      neighbor.fx -= fx;
+      neighbor.fy -= fy;
+      neighbor.fz -= fz;
+    });
+  });
+}
+
+function calculateTotalEnergy() {
+  const energyDisplay = document.getElementById("energy-display");
+  if (!energyDisplay) return;
+
+  let kineticEnergy = 0;
+  particles.forEach(p => {
+    kineticEnergy += 0.5 * p.mass * (p.vx ** 2 + p.vy ** 2 + p.vz ** 2);
+  }); 
+
+  energyDisplay.textContent = `Energy: ${kineticEnergy.toFixed(2)} J`;
+}
+
+
+// Langevin Thermostat
+const k_B = 1.0; // Boltzmann constant
+function applyLangevinThermostat(targetTemperature) {
+    const gamma = 0.5; // Damping coefficient
+    
+    if (targetTemperature <= 0) {
+        particles.forEach(p => {
+            p.vx = 0;
+            p.vy = 0;
+            p.vz = 0;
+        });
+        return;
     }
-  }
+
+    const sigma = Math.sqrt((2 * gamma * k_B * targetTemperature) / dt);
+
+    particles.forEach(p => {
+        // Random force with proper scaling
+        const randomForceX = sigma * gaussianRandom() * Math.sqrt(p.mass);
+        const randomForceY = sigma * gaussianRandom() * Math.sqrt(p.mass);
+        const randomForceZ = sigma * gaussianRandom() * Math.sqrt(p.mass);
+
+        // Damping force (proportional to velocity)
+        p.fx += (-gamma * p.vx * p.mass) + randomForceX;
+        p.fy += (-gamma * p.vy * p.mass) + randomForceY;
+        p.fz += (-gamma * p.vz * p.mass) + randomForceZ;
+    });
 }
 
-/**
- * If the user has set up some bonds, apply spring forces:
- * F = -kSpring * (r - r0).
- */
-function applyBondForces() {
-  for (const bond of bonds) {
-    const { i, j, r0, kSpring } = bond;
-    const pi = particles[i];
-    const pj = particles[j];
+// Update temperature slider value display
+const temperatureSlider = document.getElementById("temperature-slider");
+const temperatureValue = document.getElementById("temperature-value");
 
-    // Vector i->j
-    const dx = pj.position.x - pi.position.x;
-    const dy = pj.position.y - pi.position.y;
-    const dz = pj.position.z - pi.position.z;
+temperatureSlider.min = 0;
+temperatureSlider.max = 100;
+temperatureSlider.value = 25; // Default temperature
+temperatureValue.textContent = temperatureSlider.value;
 
-    const r2 = dx*dx + dy*dy + dz*dz;
-    if (r2 < 1e-12) continue;
-    const r = Math.sqrt(r2);
-
-    const dr = r - r0;
-    let f = -kSpring * dr;  // negative => restoring
-    if (f >  maxForce) f =  maxForce;
-    if (f < -maxForce) f = -maxForce;
-
-    const nx = dx / r;
-    const ny = dy / r;
-    const nz = dz / r;
-
-    const fx = f*nx;
-    const fy = f*ny;
-    const fz = f*nz;
-
-    pi.fx += fx;
-    pi.fy += fy;
-    pi.fz += fz;
-
-    pj.fx -= fx;
-    pj.fy -= fy;
-    pj.fz -= fz;
+temperatureSlider.addEventListener("input", (e) => {
+  const value = parseFloat(e.target.value);
+  temperatureValue.textContent = value.toFixed(1);
+  
+  // Force reset velocities when increasing from 0
+  if (value > 0 && particles.some(p => p.vx === 0 && p.vy === 0 && p.vz === 0)) {
+    particles.forEach(p => {
+      p.vx = (Math.random() - 0.5) * maxVelocity;
+      p.vy = (Math.random() - 0.5) * maxVelocity;
+      p.vz = (Math.random() - 0.5) * maxVelocity;
+    });
   }
-}
+});
 
-// -----------------------------------------------------------------------------
-// THERMOSTAT (velocity rescaling)
-// -----------------------------------------------------------------------------
-function applyThermostat() {
-  // compute current KE
+function calculateTemperature() {
+let k_B = 1.0
   let totalKE = 0;
-  for (const p of particles) {
-    const speed2 = p.vx*p.vx + p.vy*p.vy + p.vz*p.vz;
-    totalKE += 0.5 * p.mass * speed2;
-  }
-
-  const currentTemp = (2 * totalKE) / (3 * particles.length);
-
-  const sf = Math.sqrt(T / currentTemp);
-  for (const p of particles) {
-    p.vx *= sf;
-    p.vy *= sf;
-    p.vz *= sf;
-  }
+  const degreesOfFreedom = particles.length * 3 - 3;
+  particles.forEach(p => {
+    totalKE += 0.5 * p.mass * (p.vx**2 + p.vy**2 + p.vz**2);
+  });
+  return (2 * totalKE) / (degreesOfFreedom * k_B);
 }
 
-// -----------------------------------------------------------------------------
-// MOTION
-// -----------------------------------------------------------------------------
-function moveParticles() {
-  for (const p of particles) {
-    // Position
-    p.position.x += p.vx*dt + 0.5*(p.fx/p.mass)*dt*dt;
-    p.position.y += p.vy*dt + 0.5*(p.fy/p.mass)*dt*dt;
-    p.position.z += p.vz*dt + 0.5*(p.fz/p.mass)*dt*dt;
-
-    // Velocity
-    p.vx += (p.fx / p.mass)*dt;
-    p.vy += (p.fy / p.mass)*dt;
-    p.vz += (p.fz / p.mass)*dt;
-
-    // clamp velocity
-    p.vx = Math.max(-maxVelocity, Math.min(maxVelocity, p.vx));
-    p.vy = Math.max(-maxVelocity, Math.min(maxVelocity, p.vy));
-    p.vz = Math.max(-maxVelocity, Math.min(maxVelocity, p.vz));
-
-    // walls
-    if (p.position.x > 2.5) {
-      p.position.x = 2.5;
-      p.vx *= -1;
-    } else if (p.position.x < -2.5) {
-      p.position.x = -2.5;
-      p.vx *= -1;
-    }
-
-    if (p.position.y > 2.5) {
-      p.position.y = 2.5;
-      p.vy *= -1;
-    } else if (p.position.y < -2.5) {
-      p.position.y = -2.5;
-      p.vy *= -1;
-    }
-
-    if (p.position.z > 2.5) {
-      p.position.z = 2.5;
-      p.vz *= -1;
-    } else if (p.position.z < -2.5) {
-      p.position.z = -2.5;
-      p.vz *= -1;
-    }
-
-    // Update mesh
-    p.syncMeshPosition();
+// Add epsilon and sigma controls
+const epsilonInput = document.createElement("input");
+epsilonInput.type = "number";
+epsilonInput.value = eps; // Default value is 0.5
+epsilonInput.step = "0.1";
+epsilonInput.addEventListener("input", (e) => {
+  const value = parseFloat(e.target.value);
+  if (e.target.value === "") {
+    // Allow the field to be empty while typing
+    eps = 0.5; // Temporarily set to default (this won't break the simulation)
+  } else if (isNaN(value) || value <= 0) {
+    // Reset to default if the input is invalid
+    eps = 0.5;
+    epsilonInput.value = eps;
+  } else {
+    // Update epsilon with the new valid value
+    eps = value;
   }
-}
+});
 
-// -----------------------------------------------------------------------------
-// OPTIONAL HARD-SPHERE COLLISIONS ON TOP OF LJ
-// -----------------------------------------------------------------------------
-function checkCollisions() {
-  const N = particles.length;
-  for (let i = 0; i < N; i++) {
-    for (let j = i+1; j < N; j++) {
-      const pi = particles[i];
-      const pj = particles[j];
-
-      const dx = pj.position.x - pi.position.x;
-      const dy = pj.position.y - pi.position.y;
-      const dz = pj.position.z - pi.position.z;
-      const dist2 = dx*dx + dy*dy + dz*dz;
-      const minDist = pi.radius + pj.radius;
-
-      if (dist2 < minDist*minDist) {
-        const dist = Math.sqrt(dist2);
-        if (dist < 1e-12) continue;
-
-        // Normal
-        const nx = dx/dist;
-        const ny = dy/dist;
-        const nz = dz/dist;
-
-        // relative velocity
-        const rvx = pj.vx - pi.vx;
-        const rvy = pj.vy - pi.vy;
-        const rvz = pj.vz - pi.vz;
-
-        const relDot = rvx*nx + rvy*ny + rvz*nz;
-        if (relDot > 0) continue; // separating
-
-        // equal masses => impulse = -relDot
-        const impulse = -relDot;
-
-        // apply
-        pi.vx -= impulse*nx;
-        pi.vy -= impulse*ny;
-        pi.vz -= impulse*nz;
-
-        pj.vx += impulse*nx;
-        pj.vy += impulse*ny;
-        pj.vz += impulse*nz;
-
-        // push out overlap
-        const overlap = minDist - dist;
-        const halfOverlap = overlap*0.5;
-        pi.position.x -= nx*halfOverlap;
-        pi.position.y -= ny*halfOverlap;
-        pi.position.z -= nz*halfOverlap;
-
-        pj.position.x += nx*halfOverlap;
-        pj.position.y += ny*halfOverlap;
-        pj.position.z += nz*halfOverlap;
-      }
-    }
+const sigmaInput = document.createElement("input");
+sigmaInput.type = "number";
+sigmaInput.value = sig; // Default value is 0.5
+sigmaInput.step = "0.1";
+sigmaInput.addEventListener("input", (e) => {
+  const value = parseFloat(e.target.value);
+  if (e.target.value === "") {
+    // Allow the field to be empty while typing
+    sig = 0.5; // Temporarily set to default (this won't break the simulation)
+  } else if (isNaN(value) || value <= 0) {
+    // Reset to default if the input is invalid
+    sig = 0.5;
+    sigmaInput.value = sig;
+  } else {
+    // Update sigma with the new valid value
+    sig = value;
   }
-}
+});
 
-// -----------------------------------------------------------------------------
-// MEASUREMENT
-// -----------------------------------------------------------------------------
-function measureSystem() {
-  let totalKE = 0;
-  for (const p of particles) {
-    const speed2 = p.vx*p.vx + p.vy*p.vy + p.vz*p.vz;
-    totalKE += 0.5 * p.mass * speed2;
-  }
-  const currentTemp = (2 * totalKE) / (3 * particles.length);
-  console.log(`KE = ${totalKE.toFixed(4)}, T = ${currentTemp.toFixed(4)}`);
-}
+const epsilonLabel = document.createElement("label");
+epsilonLabel.textContent = "Epsilon (ε): ";
+epsilonLabel.appendChild(epsilonInput);
 
-// -----------------------------------------------------------------------------
-// MAIN
-// -----------------------------------------------------------------------------
-createParticles(); 
-// If you want to see bond forces in action, try e.g.
-// addBond(0, 1, 1.0, 100.0); // etc.
-addBond(0, 1, 1.0, 100.0); // etc.
+const sigmaLabel = document.createElement("label");
+sigmaLabel.textContent = "Sigma (σ): ";
+sigmaLabel.appendChild(sigmaInput);
 
+const controlsContainer = document.getElementById("controls-container");
+controlsContainer.appendChild(epsilonLabel);
+controlsContainer.appendChild(sigmaLabel);
+
+// Animation loop
 function animate() {
   requestAnimationFrame(animate);
+  
+  try {
+      // Clear forces first
+      particles.forEach(p => {
+          p.fx = 0;
+          p.fy = 0;
+          p.fz = 0;
+      });
 
-  // 1) Clear forces
-  resetForces();
+      // Apply thermostat
+      const targetTemp = parseFloat(temperatureSlider.value);
+      applyLangevinThermostat(targetTemp);
 
-  // 2) LJ + Coulomb
-  LJ_and_Coulomb_forces();
+      // Calculate inter-particle forces
+      LJ_and_Coulomb_forces();
 
-  // 2b) If any bonds => spring forces
-  applyBondForces();
+      // Apply bond forces
+      bonds.forEach(bond => {
+          if (bond.particle1 && bond.particle2) {
+              bond.applyForce();
+          }
+      });
 
-  // 3) Move
-  moveParticles();
+      // Move particles
+      moveParticles();
 
-  // 4) Hard-sphere collisions?
-  checkCollisions();
+      // Update bond visuals
+      bonds.forEach(bond => {
+          if (bond.particle1 && bond.particle2) {
+              bond.updateVisual();
+          }
+      });
 
-  // 5) Thermostat
-  applyThermostat();
+      // Update controls
+      controls.update();
 
-  // 6) measure
-  measureSystem();
+      // Update energy display
+      const energyDisplay = document.getElementById("energy-display");
+      if (energyDisplay) {
+          let kineticEnergy = 0;
+          particles.forEach(p => {
+              kineticEnergy += 0.5 * p.mass * (p.vx ** 2 + p.vy ** 2 + p.vz ** 2);
+          });
+          energyDisplay.textContent = `Energy: ${kineticEnergy.toFixed(2)} J`;
+      }
 
-  controls.update();
-  renderer.render(scene, camera);
+      // Update temperature display
+      const tempDisplay = document.getElementById("actual-temp");
+      if (tempDisplay && particles.length > 0) {
+          const avgSpeed = particles.reduce((sum, p) => 
+              sum + Math.sqrt(p.vx**2 + p.vy**2 + p.vz**2), 0) / particles.length;
+          tempDisplay.textContent = `Temp: ${(avgSpeed * 100).toFixed(1)} K`;
+      }
+
+      // Render the scene
+      renderer.render(scene, camera);
+
+  } catch (error) {
+      console.error("Animation error:", error);
+  }
 }
-animate();
+
+animate()
+
+
+// Get references to the modal and button
+const postButton = document.getElementById("post-button");
+const postModal = document.getElementById("post-modal");
+const closeModal = document.querySelector(".close");
+const postForm = document.getElementById("post-form");
+
+// Show the modal when the "Post" button is clicked
+postButton.addEventListener("click", () => {
+  postModal.style.display = "flex";
+});
+
+// Hide the modal when the close button is clicked
+closeModal.addEventListener("click", () => {
+  postModal.style.display = "none";
+});
+
+// Hide the modal when clicking outside the modal content
+window.addEventListener("click", (event) => {
+  if (event.target === postModal) {
+    postModal.style.display = "none";
+  }
+});
+
+// Handle form submission
+postForm.addEventListener("submit", async (event) => {
+  event.preventDefault(); // Prevent the form from submitting
+
+  // Get the title and description
+  const title = document.getElementById("post-title").value;
+  const description = document.getElementById("post-description").value;
+
+  // Get the particle list data
+  const particleData = particles.map(particle => ({
+    id: particle.id,
+    mass: particle.mass,
+    charge: particle.charge,
+    color: `#${particle.mesh.material.color.getHexString()}`,
+    position: {
+      x: particle.position.x,
+      y: particle.position.y,
+      z: particle.position.z
+    }
+  }));
+
+    // Send the data to the backend
+    try {
+      const response = await fetch('/save_post', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title,
+          description,
+          particle_data: JSON.stringify(particleData) // Convert to JSON string
+        }),
+      });
+  
+      const responseData = await response.json(); // Parse the JSON response
+  
+      console.log('Response:', response); // Debugging: Log the full response
+      console.log('Response Data:', responseData); // Debugging: Log the response data
+  
+      if (response.ok) {
+        // Success: Post saved successfully
+        alert('Post saved successfully!');
+        postForm.reset(); // Clear the form
+        postModal.style.display = "none"; // Hide the modal
+      } else if (response.status === 401) {
+        // Unauthorized: User is not logged in
+        alert(responseData.error); // Show error message
+        window.location.href = '/login'; // Redirect to login page
+      } else {
+        // Other errors (e.g., missing data, server error)
+        alert(`Error: ${responseData.error}`);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('An error occurred while saving the post.');
+    }
+  });
