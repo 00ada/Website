@@ -138,19 +138,18 @@ class SpatialGrid {
     const key = this.getCellKey(particle.position.x, particle.position.y, particle.position.z);
     const [i, j, k] = key.split(',').map(Number);
     const neighbors = [];
-
+  
     for (let di = -1; di <= 1; di++) {
       for (let dj = -1; dj <= 1; dj++) {
         for (let dk = -1; dk <= 1; dk++) {
-          const neighborKey = `${i + di},${j + dj},2${k + dk}`;
+          const neighborKey = `${i + di},${j + dj},${k + dk}`;  // Fixed typo (removed '2')
           if (this.grid.has(neighborKey)) {
             neighbors.push(...this.grid.get(neighborKey));
           }
         }
       }
     }
-
-    return neighbors;
+    return neighbors.filter(p => p.id !== particle.id);  // Exclude self
   }
 }
 
