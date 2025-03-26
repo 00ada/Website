@@ -153,32 +153,86 @@ def save_post():
     if not current_user.is_authenticated:
         return jsonify({'error': 'Authentication required'}), 401
     
-    data = request.json
-    title = data.get('title')
-    description = data.get('description')
-    particle_data = data.get('particle_data')
-
-    if not title or not description or not particle_data:
-        return jsonify({'error': 'Missing required fields'}), 400
-
+    print("Received request to save post")  # Debug log
+    
     try:
-        # Convert particle data to JSON string
-        particle_data_json = json.dumps(particle_data)
-    except TypeError:
-        return jsonify({'error': 'Invalid particle data format'}), 400
+        data = request.get_json()
+        print(f"Raw request data: {data}")  # Debug log
+        
+        if not data:
+            return jsonify({'error': 'No data received'}), 400
 
-    conn = get_db_connection()
-    try:
-        conn.execute('''
-            INSERT INTO posts (title, description, particle_data, user_id)
-            VALUES (?, ?, ?, ?)
-        ''', (title, description, particle_data_json, current_user.id))
-        conn.commit()
-        return jsonify({'message': 'Post saved successfully'}), 201
+        title = data.get('title')
+        description = data.get('description')
+        
+        # Validate required fields
+        if not title:
+            return jsonify({'error': 'Title is required'}), 400
+        if not description:
+            description = ""  # Make description optional
+
+        # Prepare the complete simulation data structure
+        simulation_data = {
+            'particles': data.get('particles', []),
+            'bonds': data.get('bonds', []),
+            'settings': {
+                'boxSize': data.get('boxSize', 5),
+                'dt': data.get('dt', 0.005),
+                'maxVelocity': data.get('maxVelocity', 10.0),
+                'maxForce': data.get('maxForce', 40.0),
+                'eps': data.get('eps', 0.5),
+                'sig': data.get('sig', 0.5),
+                'temperature': data.get('temperature', 25.0)
+            }
+        }
+
+        print(f"Processed simulation data: {simulation_data}")  # Debug log
+
+        # Validate particles data
+        if not isinstance(simulation_data['particles'], list):
+            return jsonify({'error': 'Particles data must be an array'}), 400
+
+        # Convert to JSON string
+        try:
+            particle_data_json = json.dumps(simulation_data)
+            print("Successfully converted to JSON")  # Debug log
+        except TypeError as e:
+            return jsonify({'error': f'Invalid data format: {str(e)}'}), 400
+
+        conn = get_db_connection()
+        try:
+            print("Attempting to save to database...")  # Debug log
+            result = conn.execute('''
+                INSERT INTO posts (title, description, particle_data, user_id)
+                VALUES (?, ?, ?, ?)
+            ''', (title, description, particle_data_json, current_user.id))
+            
+            conn.commit()
+            print(f"Successfully saved post with ID: {result.lastrowid}")  # Debug log
+            
+            return jsonify({
+                'success': True,
+                'post_id': result.lastrowid,
+                'message': 'Post saved successfully'
+            }), 201
+            
+        except Exception as e:
+            conn.rollback()
+            print(f"Database error: {str(e)}")  # Debug log
+            return jsonify({
+                'error': 'Failed to save to database',
+                'details': str(e)
+            }), 500
+        finally:
+            conn.close()
+            
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        conn.close()
+        print(f"Unexpected error: {str(e)}")  # Debug log
+        return jsonify({
+            'error': 'Failed to process request',
+            'details': str(e)
+        }), 500
+
 
 @app.route("/get_posts", methods=["GET"])
 def get_posts():

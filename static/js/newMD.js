@@ -104,9 +104,12 @@ class Particle {
     this.mesh.position.set(this.position.x, this.position.y, this.position.z);
   }
 
-    updateRadius(newRadius) {
+  updateRadius(newRadius) {
     this.radius = newRadius;
-    this.mesh.scale.set(newRadius, newRadius, newRadius);
+    // Create a new geometry with the updated radius
+    const newGeometry = new THREE.SphereGeometry(newRadius, 16, 16);
+    this.mesh.geometry.dispose(); // Clean up the old geometry
+    this.mesh.geometry = newGeometry;
   }
 }
 
@@ -172,8 +175,8 @@ class SpringBond {
 
     this.particle1 = particle1;
     this.particle2 = particle2;
-    this.springConstant = 1300;
-    this.restLength = particle1.position.distanceTo(particle2.position);
+    this.springConstant = 10000; // Increased spring constant for rigidity
+    this.restLength = (particle1.radius + particle2.radius) * 0.95; // Make them touch (95% of sum of radii)
 
     // Safer line initialization
     this.lineMaterial = new LineBasicMaterial({ color: 0x00ff00 });
@@ -181,6 +184,52 @@ class SpringBond {
     this.line = new Line(this.lineGeometry, this.lineMaterial);
     this.updateVisual();
     scene.add(this.line);
+    
+    // Immediately adjust positions to be at rest length
+    this.adjustPositionsToBondLength();
+  }
+
+  adjustPositionsToBondLength() {
+    const currentVec = new THREE.Vector3().subVectors(
+      this.particle2.position, 
+      this.particle1.position
+    );
+    const currentLength = currentVec.length();
+    
+    if (currentLength === 0) return; // Avoid division by zero
+    
+    const adjustmentFactor = (currentLength - this.restLength) / 2;
+    const direction = currentVec.normalize();
+    
+    // Move particles towards each other to achieve rest length
+    this.particle1.position.addScaledVector(direction, adjustmentFactor);
+    this.particle2.position.addScaledVector(direction, -adjustmentFactor);
+    
+    // Update velocities to maintain momentum
+    const totalMass = this.particle1.mass + this.particle2.mass;
+    const massRatio1 = this.particle2.mass / totalMass;
+    const massRatio2 = this.particle1.mass / totalMass;
+    
+    const relativeVelocity = new THREE.Vector3(
+      this.particle2.vx - this.particle1.vx,
+      this.particle2.vy - this.particle1.vy,
+      this.particle2.vz - this.particle1.vz
+    );
+    
+    const velocityAlongBond = relativeVelocity.dot(direction);
+    const impulse = 2 * velocityAlongBond / totalMass;
+    
+    this.particle1.vx += direction.x * impulse * massRatio1;
+    this.particle1.vy += direction.y * impulse * massRatio1;
+    this.particle1.vz += direction.z * impulse * massRatio1;
+    
+    this.particle2.vx -= direction.x * impulse * massRatio2;
+    this.particle2.vy -= direction.y * impulse * massRatio2;
+    this.particle2.vz -= direction.z * impulse * massRatio2;
+    
+    // Update mesh positions
+    this.particle1.syncMeshPosition();
+    this.particle2.syncMeshPosition();
   }
 
   applyForce() {
@@ -192,6 +241,7 @@ class SpringBond {
       const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
       if (distance === 0) return;
 
+      // Very strong spring force to keep them at rest length
       const displacement = distance - this.restLength;
       const forceMagnitude = this.springConstant * displacement;
 
@@ -206,10 +256,16 @@ class SpringBond {
       this.particle2.fx -= fx;
       this.particle2.fy -= fy;
       this.particle2.fz -= fz;
+      
+      // Additional position correction to ensure they stay exactly at rest length
+      if (Math.abs(displacement) > 0.01) {
+        this.adjustPositionsToBondLength();
+      }
     } catch (error) {
       console.error("Error applying bond force:", error);
     }
   }
+
 
   updateVisual() {
     try {
@@ -294,7 +350,7 @@ function updateParticleList() {
     particleDiv.className = "particle-item";
 
     const particleInfo = document.createElement("p");
-    particleInfo.textContent = `Particle ${particle.id}: Mass = ${particle.mass}, Charge = ${particle.charge}, Color = ${particle.mesh.material.color.getHexString()}`;
+    particleInfo.textContent = `Particle ${particle.id}: Mass = ${particle.mass}, Charge = ${particle.charge}, Radius = ${particle.radius}, Color = ${particle.mesh.material.color.getHexString()}`;
 
     // Mass input
     const massInput = document.createElement("input");
@@ -328,6 +384,29 @@ function updateParticleList() {
       } else {
         particle.charge = newCharge;
       }
+      updateParticleList();
+    });
+
+    // Radius input
+    const radiusInput = document.createElement("input");
+    radiusInput.type = "number";
+    radiusInput.step = "0.1";
+    radiusInput.min = "0.1";
+    radiusInput.value = particle.radius;
+    radiusInput.placeholder = "Radius";
+    radiusInput.addEventListener("change", (e) => {
+      const newRadius = parseFloat(e.target.value);
+      if (isNaN(newRadius)) {
+        particle.updateRadius(0.3);
+        radiusInput.value = 0.3;
+      } else if (newRadius <= 0) {
+        particle.updateRadius(0.1);
+        radiusInput.value = 0.1;
+      } else {
+        particle.updateRadius(newRadius);
+      }
+      // Update bonds if this particle has any
+      updateBondsForParticle(particle);
       updateParticleList();
     });
 
@@ -390,6 +469,7 @@ function updateParticleList() {
     particleDiv.appendChild(particleInfo);
     particleDiv.appendChild(massInput);
     particleDiv.appendChild(chargeInput);
+    particleDiv.appendChild(radiusInput);
     particleDiv.appendChild(colorInput);
     particleDiv.appendChild(selectButton);
     particleDiv.appendChild(duplicateButton);
@@ -742,59 +822,63 @@ window.addEventListener("click", (event) => {
 
 // Handle form submission
 postForm.addEventListener("submit", async (event) => {
-  event.preventDefault(); // Prevent the form from submitting
+  event.preventDefault();
 
-  // Get the title and description
-  const title = document.getElementById("post-title").value;
-  const description = document.getElementById("post-description").value;
+  const title = document.getElementById("post-title").value; // Get title
+  const description = document.getElementById("post-description").value; // Get description
 
-  // Get the particle list data
-  const particleData = particles.map(particle => ({
-    id: particle.id,
-    mass: particle.mass,
-    charge: particle.charge,
-    color: `#${particle.mesh.material.color.getHexString()}`,
-    position: {
-      x: particle.position.x,
-      y: particle.position.y,
-      z: particle.position.z
+  // Prepare simulation data
+  const simulationData = {
+    title,
+    description,
+    particles: particles.map(p => ({
+      id: p.id,
+      position: { x: p.position.x, y: p.position.y, z: p.position.z },
+      velocity: { x: p.vx, y: p.vy, z: p.vz },
+      mass: p.mass,
+      charge: p.charge,
+      radius: p.radius,
+      color: p.mesh.material.color.getHex()
+    })),
+    bonds: bonds.map(b => ({
+      particle1Id: b.particle1.id,
+      particle2Id: b.particle2.id,
+      springConstant: b.springConstant,
+      restLength: b.restLength
+    })),
+    settings: {
+      boxSize,
+      dt,
+      maxVelocity,
+      maxForce,
+      eps,
+      sig,
+      temperature: parseFloat(temperatureSlider.value)
     }
-  }));
+  };
 
-    // Send the data to the backend
-    try {
-      const response = await fetch('/save_post', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title,
-          description,
-          particle_data: JSON.stringify(particleData) // Convert to JSON string
-        }),
-      });
-  
-      const responseData = await response.json(); // Parse the JSON response
-  
-      console.log('Response:', response); // Debugging: Log the full response
-      console.log('Response Data:', responseData); // Debugging: Log the response data
-  
-      if (response.ok) {
-        // Success: Post saved successfully
-        alert('Post saved successfully!');
-        postForm.reset(); // Clear the form
-        postModal.style.display = "none"; // Hide the modal
-      } else if (response.status === 401) {
-        // Unauthorized: User is not logged in
-        alert(responseData.error); // Show error message
-        window.location.href = '/login'; // Redirect to login page
-      } else {
-        // Other errors (e.g., missing data, server error)
-        alert(`Error: ${responseData.error}`);
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      alert('An error occurred while saving the post.');
+  try {
+    const response = await fetch('/save_post', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(simulationData)
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      alert('Post saved successfully!');
+      postModal.style.display = "none";
+      postForm.reset();
+      // Redirect to the new post
+      window.location.href = `/post/${data.post_id}`;
+    } else {
+      const error = await response.json();
+      alert(`Error: ${error.message}`);
     }
-  });
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Failed to save simulation');
+  }
+});
