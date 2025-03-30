@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+<title>{% block title %}{{ user.username }}'s Profile{% endblock %}</title>
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class='account-container'>
+    <!-- Profile Section -->
+    <div class='media'>
+        <img class='account_image' src="{{ url_for('static', filename='profile_pics/' + user.image_file) }}" alt="{{ user.username }}">
+        <div class='media-body'>
+            <h2 class="account-user">{{ user.username }}</h2>
+        </div>
+    </div>
+
+    <!-- User's Posts Section -->
+    <h3 class="user-posts-header">{{ user.username }}'s Posts</h3>
+    <div id="userPostsContainer" class="posts-container">
+        {% if user_posts %}
+            {% for post in user_posts %}
+                <div class="post-container">
+                    <div class="post-header">
+                        <img src="{{ url_for('static', filename='profile_pics/' + post.user_image) }}" alt="{{ post.username }}">
+                        <a href="{{ url_for('view_profile', user_id=post.user_id) }}">{{ post.username }}</a>
+                    </div>
+                    <a href="{{ url_for('view_post', post_id=post.id) }}" class="post-title">
+                        {{ post.title }}
+                    </a>
+                    <div class="post-description">{{ post.description[:100] }}...</div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p class="no-posts">No posts yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,19 @@
+/* Make username clickable */
+.post-profile-username {
+    color: #4a6fa5;
+    text-decoration: none;
+    font-weight: bold;
+    transition: color 0.3s;
+}
+
+.post-profile-username:hover {
+    color: #3a5a8c;
+    text-decoration: underline;
+}
+
+/* Profile image link alignment */
+.post-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}

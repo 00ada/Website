@@ -12,21 +12,26 @@
         <img src="{{ url_for('static', filename='profile_pics/' + post.user_image) }}" 
              alt="{{ post.username }}" 
              class="post-profile-image">
-        <div class="post-profile-username">{{ post.username }}</div>
+        <a href="{{ url_for('view_profile', user_id=post.user_id) }}" class="post-profile-username">
+            {{ post.username }}
+        </a>
     </div>
 
     <div class="post-content">
-        <!-- Corrected data attribute with proper JSON serialization -->
-        <div id="simulation-container" 
-             class="simulation-container"
-             data-particle-data="{{ post.particle_data | tojson | safe }}">
+        <div class="simulation-container">
+            <div id="particle-container" 
+                 data-particles='{{ particles|tojson|safe }}'
+                 data-bonds='{{ bonds|tojson|safe }}'
+                 data-settings='{{ settings|tojson|safe }}'
+                 style="width: 380px; height: 380px;">
+            </div>
         </div>
-
         <div class="post-description">
             <h2>{{ post.title }}</h2>
             <p>{{ post.description }}</p>
         </div>
     </div>
+    
 </div>
 
 <script src="{{ url_for('static', filename='js/view_post.js') }}" type="module"></script>

@@ -1,324 +1,277 @@
 import * as THREE from 'https://unpkg.com/three@latest/build/three.module.js';
 import { OrbitControls } from 'https://unpkg.com/three@0.127.0/examples/jsm/controls/OrbitControls.js';
 
-console.log('Initializing Three.js...');
+document.addEventListener('DOMContentLoaded', () => {
+  const container = document.getElementById('particle-container');
+  if (!container) {
+    console.error('Particle container not found.');
+    return;
+  }
 
-// -----------------------
-// Global simulation config
-// -----------------------
-const dt = 0.005;
-const maxVelocity = 10.0;
-const maxForce = 40.0;
-const boxSize = 5;
+  // Parse the embedded simulation data: particles, bonds, and settings.
+  let parsedParticles = [];
+  let parsedBonds = [];
+  let settings = {};
+  try {
+    parsedParticles = JSON.parse(container.dataset.particles);
+    parsedBonds = JSON.parse(container.dataset.bonds);
+    settings = JSON.parse(container.dataset.settings);
+  } catch (error) {
+    console.error('Error parsing simulation data:', error,
+      'Raw particles:', container.dataset.particles,
+      'Raw bonds:', container.dataset.bonds,
+      'Raw settings:', container.dataset.settings);
+  }
+  console.log("Parsed particles:", parsedParticles);
+  console.log("Parsed bonds:", parsedBonds);
+  console.log("Settings:", settings);
 
-// Default particle properties
-const defaultMass = 1.0;
-const defaultCharge = 0.0;
-const defaultColor = 0xffffff;
-const defaultRadius = 0.3;
+  // Extract simulation parameters from settings, with sensible defaults:
+  const dt = settings.dt || 0.005;
+  const boxSize = settings.boxSize || 5;
+  const maxVelocity = settings.maxVelocity || 10.0;
+  const maxForce = settings.maxForce || 40.0;
+  const eps = settings.eps || 0.5;
+  const sig = settings.sig || 0.5;
+  const temperature = settings.temperature || 25; // Default temperature if not provided
+  const gamma = 0.5; // Damping coefficient for thermostat
+  const k_B = 1.0; // Boltzmann constant
 
-// Lennard-Jones parameters
-let eps = 0.5; // Depth of potential well
-let sig = 0.5; // Distance at which potential = 0
+  // Compute sigma for the Langevin thermostat random force:
+  const sigmaThermostat = Math.sqrt((2 * gamma * k_B * temperature) / dt);
 
-// ------------------------
-// Three.js scene setup
-// ------------------------
-const container = document.getElementById('simulation-container');
-if (!container) {
-  console.error('Simulation container not found!');
-}
+  // THREE.js setup
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x2b2b2b);
+  const width = container.offsetWidth;
+  const height = container.offsetHeight;
+  const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+  camera.position.z = 10;
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(width, height);
+  container.appendChild(renderer.domElement);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
 
-const width = container.clientWidth;
-const height = container.clientHeight;
-console.log('Container dimensions:', width, height);
+  // Add a bounding box to indicate simulation limits
+  const boxGeometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
+  const boxMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.5,
+  });
+  const boxMesh = new THREE.Mesh(boxGeometry, boxMaterial);
+  scene.add(boxMesh);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-renderer.setSize(width, height);
-renderer.setClearColor(0x2b2b2b);
-container.appendChild(renderer.domElement);
+  // Utility: Gaussian random number generator
+  function gaussianRandom(mean = 0, stdev = 1) {
+    const u = 1 - Math.random();
+    const v = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v) * stdev + mean;
+  }
 
-const scene = new THREE.Scene();
-console.log('Scene created.');
+  // Particle class that stores simulation properties and creates a THREE.js sphere.
+  class Particle {
+    constructor(data) {
+      this.id = data.id || 0;
+      this.mass = data.mass || 1.0;
+      this.charge = data.charge || 0.0;
+      this.radius = data.radius || 0.3;
+      this.position = new THREE.Vector3(
+        (data.position && data.position.x) || 0,
+        (data.position && data.position.y) || 0,
+        (data.position && data.position.z) || 0
+      );
+      this.velocity = new THREE.Vector3(
+        (data.velocity && data.velocity.x) || 0,
+        (data.velocity && data.velocity.y) || 0,
+        (data.velocity && data.velocity.z) || 0
+      );
+      this.force = new THREE.Vector3(0, 0, 0);
 
-const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-camera.position.set(0, 5, 15);
-camera.lookAt(0, 0, 0);
-console.log('Camera set up.');
+      let color = data.color;
+      if (typeof color === "string") {
+        if (color.startsWith('#')) {
+          color = parseInt(color.substring(1), 16);
+        } else {
+          color = parseInt(color, 16);
+        }
+      }
+      this.color = color || 0xffffff;
+      const geometry = new THREE.SphereGeometry(this.radius, 16, 16);
+      const material = new THREE.MeshBasicMaterial({ color: this.color });
+      this.mesh = new THREE.Mesh(geometry, material);
+      this.mesh.position.copy(this.position);
+      scene.add(this.mesh);
+    }
+    updateMesh() {
+      this.mesh.position.copy(this.position);
+    }
+  }
 
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0, 0);
-controls.enableDamping = true;
-controls.dampingFactor = 0.1;
-console.log('OrbitControls initialized.');
+  // Create particles from parsed data.
+  const particles = [];
+  parsedParticles.forEach(data => {
+    particles.push(new Particle(data));
+  });
 
-// Helper visuals
-const axesHelper = new THREE.AxesHelper(5);
-scene.add(axesHelper);
+  // SpringBond class to represent bonds between particles.
+  class SpringBond {
+    constructor(bondData, particles) {
+      // bondData should include: particle1Id, particle2Id, springConstant, restLength.
+      this.particle1 = particles.find(p => p.id === bondData.particle1Id);
+      this.particle2 = particles.find(p => p.id === bondData.particle2Id);
+      this.springConstant = bondData.springConstant || 10000;
+      this.restLength = bondData.restLength || ((this.particle1.radius + this.particle2.radius) * 0.95);
+      // Create a line to visually represent the bond.
+      const material = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+      const geometry = new THREE.BufferGeometry();
+      this.line = new THREE.Line(geometry, material);
+      scene.add(this.line);
+      this.updateVisual();
+    }
+    updateVisual() {
+      if (!this.particle1 || !this.particle2) return;
+      const positions = new Float32Array([
+        this.particle1.position.x, this.particle1.position.y, this.particle1.position.z,
+        this.particle2.position.x, this.particle2.position.y, this.particle2.position.z
+      ]);
+      this.line.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      this.line.geometry.attributes.position.needsUpdate = true;
+    }
+    applyForce() {
+      if (!this.particle1 || !this.particle2) return;
+      const diff = new THREE.Vector3().subVectors(this.particle2.position, this.particle1.position);
+      const currentLength = diff.length();
+      if (currentLength === 0) return;
+      const displacement = currentLength - this.restLength;
+      const forceMagnitude = this.springConstant * displacement;
+      const direction = diff.normalize();
+      const forceVec = direction.multiplyScalar(forceMagnitude);
+      // Apply equal and opposite forces.
+      this.particle1.force.add(forceVec);
+      this.particle2.force.sub(forceVec);
+    }
+  }
 
-const boxGeometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
-const boxMaterial = new THREE.MeshBasicMaterial({
-  color: 0xffffff,
-  wireframe: true,
-  transparent: true,
-  opacity: 0.5,
+  // Create bonds from parsed data.
+  const bonds = [];
+  parsedBonds.forEach(bondData => {
+    // Only add bond if both particles exist.
+    const p1Exists = particles.some(p => p.id === bondData.particle1Id);
+    const p2Exists = particles.some(p => p.id === bondData.particle2Id);
+    if (p1Exists && p2Exists) {
+      bonds.push(new SpringBond(bondData, particles));
+    }
+  });
+
+  // Calculate forces: includes inter-particle forces and bonds.
+  function calculateForces() {
+    // Reset forces for all particles.
+    particles.forEach(p => p.force.set(0, 0, 0));
+
+    // Compute pairwise forces (Lennard-Jones + Coulomb).
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const p1 = particles[i];
+        const p2 = particles[j];
+        const diff = new THREE.Vector3().subVectors(p1.position, p2.position);
+        const r2 = diff.lengthSq();
+        if (r2 < 1e-6) continue;
+        const r = Math.sqrt(r2);
+
+        const sigma6 = Math.pow(sig, 6);
+        const sigma12 = Math.pow(sig, 12);
+        const r6 = Math.pow(r, 6);
+        const r12 = r6 * r6;
+        let ljForceMag = 24 * eps * ((2 * sigma12) / (r12 * r) - (sigma6) / (r6 * r));
+
+        let coulombForceMag = (8.99e9 * p1.charge * p2.charge) / r2;
+
+        let forceMag = ljForceMag + coulombForceMag;
+        forceMag = Math.max(-maxForce, Math.min(maxForce, forceMag));
+
+        const direction = diff.normalize();
+        const forceVec = direction.multiplyScalar(forceMag);
+        p1.force.add(forceVec);
+        p2.force.sub(forceVec);
+      }
+    }
+
+    // Apply bond forces.
+    bonds.forEach(bond => {
+      bond.applyForce();
+    });
+
+    // Apply a simple Langevin thermostat based on the temperature.
+    particles.forEach(p => {
+      // Add random force scaled by temperature.
+      const randomForce = new THREE.Vector3(
+        sigmaThermostat * gaussianRandom() * Math.sqrt(p.mass),
+        sigmaThermostat * gaussianRandom() * Math.sqrt(p.mass),
+        sigmaThermostat * gaussianRandom() * Math.sqrt(p.mass)
+      );
+      // Apply damping force.
+      const dampingForce = p.velocity.clone().multiplyScalar(-gamma * p.mass);
+      p.force.add(randomForce).add(dampingForce);
+    });
+  }
+
+  // Update particle positions, velocities, and handle collisions.
+  function moveParticles() {
+    particles.forEach(p => {
+      const acceleration = p.force.clone().divideScalar(p.mass);
+      p.velocity.add(acceleration.multiplyScalar(dt));
+      if (p.velocity.length() > maxVelocity) {
+        p.velocity.setLength(maxVelocity);
+      }
+      p.position.add(p.velocity.clone().multiplyScalar(dt));
+
+      // Reflect off the box boundaries.
+      const halfBox = boxSize / 2;
+      if (p.position.x > halfBox) {
+        p.position.x = halfBox;
+        p.velocity.x *= -1;
+      } else if (p.position.x < -halfBox) {
+        p.position.x = -halfBox;
+        p.velocity.x *= -1;
+      }
+      if (p.position.y > halfBox) {
+        p.position.y = halfBox;
+        p.velocity.y *= -1;
+      } else if (p.position.y < -halfBox) {
+        p.position.y = -halfBox;
+        p.velocity.y *= -1;
+      }
+      if (p.position.z > halfBox) {
+        p.position.z = halfBox;
+        p.velocity.z *= -1;
+      } else if (p.position.z < -halfBox) {
+        p.position.z = -halfBox;
+        p.velocity.z *= -1;
+      }
+      p.updateMesh();
+    });
+  }
+
+  // Main animation loop.
+  function animate() {
+    requestAnimationFrame(animate);
+    calculateForces();
+    moveParticles();
+    bonds.forEach(bond => bond.updateVisual());
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // Update renderer and camera on window resize.
+  window.addEventListener('resize', () => {
+    const newWidth = container.offsetWidth;
+    const newHeight = container.offsetHeight;
+    camera.aspect = newWidth / newHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(newWidth, newHeight);
+  });
 });
-const box = new THREE.Mesh(boxGeometry, boxMaterial);
-scene.add(box);
-console.log('Box added to the scene.');
-
-// --------------
-// Particle class
-// --------------
-class Particle {
-  static lastID = 0;
-  constructor({
-    id,
-    x = 0,
-    y = 0,
-    z = 0,
-    vx = 0,
-    vy = 0,
-    vz = 0,
-    mass = defaultMass,
-    charge = defaultCharge,
-    radius = defaultRadius,
-    color = defaultColor,
-  }) {
-    this.id = id || ++Particle.lastID;
-    this.mass = mass;
-    this.charge = charge;
-    this.radius = radius;
-    this.position = new THREE.Vector3(x, y, z);
-
-    this.vx = vx;
-    this.vy = vy;
-    this.vz = vz;
-
-    this.fx = 0;
-    this.fy = 0;
-    this.fz = 0;
-
-    // Mesh
-    const geom = new THREE.SphereGeometry(radius, 16, 16);
-    const mat = new THREE.MeshBasicMaterial({ color });
-    this.mesh = new THREE.Mesh(geom, mat);
-    this.mesh.position.set(x, y, z);
-    scene.add(this.mesh);
-  }
-
-  syncMeshPosition() {
-    this.mesh.position.set(this.position.x, this.position.y, this.position.z);
-  }
-}
-
-// Particle container
-const particles = [];
-
-// ---------------------
-// Add particle function
-// ---------------------
-function addParticle({
-  x,
-  y,
-  z,
-  vx,
-  vy,
-  vz,
-  mass = defaultMass,
-  charge = defaultCharge,
-  radius = defaultRadius,
-  color = defaultColor,
-}) {
-  const newParticle = new Particle({
-    x,
-    y,
-    z,
-    vx,
-    vy,
-    vz,
-    mass,
-    charge,
-    radius,
-    color,
-  });
-  particles.push(newParticle);
-}
-
-// -----------------------------------
-// Load particle data from the DOM
-// -----------------------------------
-let particleData;
-try {
-  const rawData = container.dataset.particleData;
-  console.log('Raw particle data:', rawData);
-  
-  // Parse the JSON data
-  particleData = JSON.parse(rawData);
-  console.log('Parsed particle data:', particleData);
-
-  particleData.forEach((p) => {
-    try {
-      // Handle missing properties with defaults
-      addParticle({
-        x: p.position?.x || 0,
-        y: p.position?.y || 0,
-        z: p.position?.z || 0,
-        vx: 0,
-        vy: 0,
-        vz: 0,
-        mass: typeof p.mass === 'number' ? p.mass : defaultMass,
-        charge: typeof p.charge === 'number' ? p.charge : defaultCharge,
-        color: p.color ? 
-          parseInt(p.color.replace('#', '0x')) : 
-          defaultColor,
-      });
-    } catch (particleError) {
-      console.error('Error adding particle:', particleError);
-    }
-  });
-} catch (parseError) {
-  console.error('Data parsing error:', parseError);
-  console.error('Problematic data:', container.dataset.particleData);
-}
-
-// ----------------------------------------
-// Lennard-Jones + Coulomb force calculation
-// ----------------------------------------
-function LJ_and_Coulomb_forces() {
-  // Coulomb constant (approx.)
-  const k = 8.99e9;
-
-  // Reset all forces
-  for (const p of particles) {
-    p.fx = 0;
-    p.fy = 0;
-    p.fz = 0;
-  }
-
-  for (let i = 0; i < particles.length; i++) {
-    for (let j = i + 1; j < particles.length; j++) {
-      const pi = particles[i];
-      const pj = particles[j];
-
-      const dx = pi.position.x - pj.position.x;
-      const dy = pi.position.y - pj.position.y;
-      const dz = pi.position.z - pj.position.z;
-
-      const r2 = dx * dx + dy * dy + dz * dz;
-      if (r2 < 1e-6) continue;
-
-      const r = Math.sqrt(r2);
-
-      // Lennard-Jones
-      const sigma6 = Math.pow(sig, 6);
-      const sigma12 = Math.pow(sig, 12);
-      const r6 = Math.pow(r, 6);
-      const r12 = r6 * r6;
-
-      // 4 * eps * [ (sigma/r)^12 - (sigma/r)^6 ]
-      // The force magnitude is the derivative of that potential:
-      // F_LJ = 24*eps * [ 2*(sigma^12)/(r^13) - (sigma^6)/(r^7) ]
-      const ljForceMag =
-        24 * eps * ((2 * sigma12) / (r12 * r) - sigma6 / (r6 * r));
-
-      // Coulomb
-      const coulombForceMag = (k * pi.charge * pj.charge) / r2;
-
-      // Combine
-      let combined = ljForceMag + coulombForceMag;
-
-      // Clamp the force
-      if (combined > maxForce) combined = maxForce;
-      if (combined < -maxForce) combined = -maxForce;
-
-      // Direction
-      const fx = combined * (dx / r);
-      const fy = combined * (dy / r);
-      const fz = combined * (dz / r);
-
-      // Apply equal and opposite forces
-      pi.fx += fx;
-      pi.fy += fy;
-      pi.fz += fz;
-
-      pj.fx -= fx;
-      pj.fy -= fy;
-      pj.fz -= fz;
-    }
-  }
-}
-
-// -----------------------
-// Move & boundary checks
-// -----------------------
-function moveParticles() {
-  for (const p of particles) {
-    // Update velocity from force
-    p.vx += (p.fx / p.mass) * dt;
-    p.vy += (p.fy / p.mass) * dt;
-    p.vz += (p.fz / p.mass) * dt;
-
-    // Clamp velocity
-    const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy + p.vz * p.vz);
-    if (speed > maxVelocity) {
-      const scale = maxVelocity / speed;
-      p.vx *= scale;
-      p.vy *= scale;
-      p.vz *= scale;
-    }
-
-    // Update position
-    p.position.x += p.vx * dt;
-    p.position.y += p.vy * dt;
-    p.position.z += p.vz * dt;
-
-    // Boundary collisions (reflect)
-    if (p.position.x > boxSize / 2) {
-      p.position.x = boxSize / 2;
-      p.vx *= -1;
-    } else if (p.position.x < -boxSize / 2) {
-      p.position.x = -boxSize / 2;
-      p.vx *= -1;
-    }
-
-    if (p.position.y > boxSize / 2) {
-      p.position.y = boxSize / 2;
-      p.vy *= -1;
-    } else if (p.position.y < -boxSize / 2) {
-      p.position.y = -boxSize / 2;
-      p.vy *= -1;
-    }
-
-    if (p.position.z > boxSize / 2) {
-      p.position.z = boxSize / 2;
-      p.vz *= -1;
-    } else if (p.position.z < -boxSize / 2) {
-      p.position.z = -boxSize / 2;
-      p.vz *= -1;
-    }
-
-    // Sync the mesh to the updated position
-    p.syncMeshPosition();
-  }
-}
-
-// ------------------
-// Animation loop
-// ------------------
-function animate() {
-  requestAnimationFrame(animate);
-
-  // 1) Move particles based on last frame's forces
-  moveParticles();
-
-  // 2) Compute new forces for the *next* iteration
-  LJ_and_Coulomb_forces();
-
-  // 3) Update controls and render
-  controls.update();
-  renderer.render(scene, camera);
-}
-
-// Kick off the simulation
-animate();

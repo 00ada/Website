@@ -3,16 +3,95 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/account.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
 {% endblock %}
 
 {% block content %}
-    <div class='account-container'>
-        <div class='media'>
-            <img class='account_image' src="{{ image_file }}">
-            <div class='media-body'>
-                <h2 class="account-user">{{ current_user.username }}</h2>
-                <p class="account-email">{{ current_user.email }}</p>
-            </div>
+<div class='account-container'>
+    <!-- Profile Section -->
+    <div class='media'>
+        <img class='account_image' src="{{ image_file }}" alt="{{ current_user.username }}">
+        <div class='media-body'>
+            <h2 class="account-user">{{ current_user.username }}</h2>
+            <p class="account-email">{{ current_user.email }}</p>
         </div>
     </div>
+
+    <!-- Profile Update Form -->
+    <form method="POST" action="{{ url_for('account') }}" enctype="multipart/form-data" class="account-form">
+        <h3>Update Profile</h3>
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" name="username" id="username" value="{{ current_user.username }}" class="form-control">
+        </div>
+        <div class="form-group">
+            <label for="picture">Profile Picture</label>
+            <input type="file" name="picture" id="picture" class="form-control-file">
+        </div>
+        <button type="submit" class="btn btn-primary">Update</button>
+    </form>
+
+    <!-- User's Posts Section -->
+    <h3 class="user-posts-header">{{ current_user.username }}'s Posts</h3>
+    <div id="userPostsContainer" class="posts-container">
+        {% if user_posts %}
+            {% for post in user_posts %}
+                <div class="post-container">
+                    <div class="post-header">
+                        <img src="{{ url_for('static', filename='profile_pics/' + post.user_image) }}" alt="{{ post.username }}">
+                        <h3>{{ post.username }}</h3>
+                    </div>
+                    <button onclick="window.location.href='{{ url_for('view_post', post_id=post.id) }}'" class="post-title">
+                        {{ post.title }}
+                    </button>
+                    <div class="post-description">{{ post.description[:100] }}...</div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p class="no-posts">No posts yet.</p>
+        {% endif %}
+    </div>
+
+</div>
+
+<script>
+    // Function to fetch user's posts
+    async function fetchUserPosts() {
+        try {
+            const response = await fetch(`/get_user_posts?user_id={{ current_user.id }}`);
+            const posts = await response.json();
+            const postsContainer = document.getElementById('userPostsContainer');
+            
+            postsContainer.innerHTML = ''; // Clear previous posts
+            
+            if (posts.length === 0) {
+                postsContainer.innerHTML = '<p class="no-posts">No posts yet.</p>';
+                return;
+            }
+            
+            posts.forEach(post => {
+                const postElement = document.createElement('div');
+                postElement.className = 'post-container';
+                
+                postElement.innerHTML = `
+                    <div class="post-header">
+                        <img src="{{ url_for('static', filename='profile_pics/') }}${post.user_image}" alt="${post.username}">
+                        <h3>${post.username}</h3>
+                    </div>
+                    <button onclick="window.location.href='/post/${post.id}'" class="post-title">
+                        ${post.title}
+                    </button>
+                    <div class="post-description">${post.description.substring(0, 100)}...</div>
+                `;
+                
+                postsContainer.appendChild(postElement);
+            });
+        } catch (error) {
+            console.error('Error fetching user posts:', error);
+        }
+    }
+    
+    // Fetch user's posts when page loads
+    window.onload = fetchUserPosts;
+</script>
 {% endblock %}

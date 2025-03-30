@@ -291,6 +291,59 @@ class SpringBond {
   }
 }
 
+
+async function saveSimulation(title, description) {
+  try {
+    const simulationData = {
+      title: title,
+      description: description,
+      particles: particles.map(p => ({
+        id: p.id,
+        position: { x: p.position.x, y: p.position.y, z: p.position.z },
+        velocity: { x: p.vx, y: p.vy, z: p.vz },
+        mass: p.mass,
+        charge: p.charge,
+        radius: p.radius,
+        color: p.mesh.material.color.getHex()
+      })),
+      bonds: bonds.map(b => ({
+        particle1Id: b.particle1.id,
+        particle2Id: b.particle2.id,
+        springConstant: b.springConstant,
+        restLength: b.restLength
+      })),
+      settings: {  // Properly structured settings
+        boxSize: boxSize,
+        dt: dt,
+        maxVelocity: maxVelocity,
+        maxForce: maxForce,
+        eps: eps,
+        sig: sig,
+        temperature: parseFloat(temperatureSlider.value)
+      }
+    };
+
+    console.log("Saving simulation data:", simulationData);
+
+    const response = await fetch('/save_post', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(simulationData)
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to save simulation');
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Save error:", error);
+    throw error;
+  }
+}
+
 function gaussianRandom(mean = 0, stdev = 1) {
   const u = 1 - Math.random();
   const v = Math.random();
@@ -823,62 +876,17 @@ window.addEventListener("click", (event) => {
 // Handle form submission
 postForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-
-  const title = document.getElementById("post-title").value; // Get title
-  const description = document.getElementById("post-description").value; // Get description
-
-  // Prepare simulation data
-  const simulationData = {
-    title,
-    description,
-    particles: particles.map(p => ({
-      id: p.id,
-      position: { x: p.position.x, y: p.position.y, z: p.position.z },
-      velocity: { x: p.vx, y: p.vy, z: p.vz },
-      mass: p.mass,
-      charge: p.charge,
-      radius: p.radius,
-      color: p.mesh.material.color.getHex()
-    })),
-    bonds: bonds.map(b => ({
-      particle1Id: b.particle1.id,
-      particle2Id: b.particle2.id,
-      springConstant: b.springConstant,
-      restLength: b.restLength
-    })),
-    settings: {
-      boxSize,
-      dt,
-      maxVelocity,
-      maxForce,
-      eps,
-      sig,
-      temperature: parseFloat(temperatureSlider.value)
-    }
-  };
-
+  
+  const title = document.getElementById("post-title").value;
+  const description = document.getElementById("post-description").value;
+  
   try {
-    const response = await fetch('/save_post', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(simulationData)
-    });
-
-    if (response.ok) {
-      const data = await response.json();
+      const result = await saveSimulation(title, description);
       alert('Post saved successfully!');
       postModal.style.display = "none";
       postForm.reset();
-      // Redirect to the new post
-      window.location.href = `/post/${data.post_id}`;
-    } else {
-      const error = await response.json();
-      alert(`Error: ${error.message}`);
-    }
+      window.location.href = `/post/${result.post_id}`;
   } catch (error) {
-    console.error('Error:', error);
-    alert('Failed to save simulation');
+      alert(`Failed to save: ${error.message}`);
   }
 });

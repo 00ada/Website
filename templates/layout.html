@@ -12,7 +12,7 @@
 </head>
 <body>
     <header class="header">
-        <a href="#" class="logo">Logo</a>
+        <a href="/home" class="logo">Logo</a>
         
         <nav class="navbar">
             {% if current_user.is_authenticated %}
@@ -21,6 +21,7 @@
                 <a href="/logout">Logout</a>
             {% else %}
                 <a href="/create">Create</a>
+                <a href="/register">Register</a>
                 <a href="/login">Login</a>
             {% endif %}
         </nav>

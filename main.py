@@ -6,16 +6,23 @@ from datetime import datetime
 from flask_login import LoginManager, login_user, current_user, logout_user, login_required
 from user_auth import *
 import json
-
+import os 
+from werkzeug.utils import secure_filename
 
 
 app = Flask(__name__)
 app.config['SECRET_KEY']='md-sim'
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+app.config['UPLOAD_FOLDER'] = os.path.join(app.root_path, 'static', 'profile_pics')
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
 DATABASE = 'userdata.db'
 
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+           
 def get_db_connection():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
@@ -41,6 +48,10 @@ init_db()
 @login_manager.user_loader
 def load_user(user_id):
     return User.get(user_id)
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route("/home", methods=["GET", "POST"])
 @app.route("/", methods=["GET", "POST"])
@@ -140,99 +151,99 @@ def logout():
 @app.route("/account", methods=["GET", "POST"])
 @login_required
 def account():
-    image_file = (url_for('static', filename='profile_pics/' + current_user.image_file ))
+    if request.method == "POST":
+        # Handle form submission
+        username = request.form.get('username')
+        picture = request.files.get('picture')
+        
+        # Validate username
+        if username and username != current_user.username:
+            # Check if username is already taken
+            conn = get_db_connection()
+            existing_user = conn.execute('SELECT id FROM users WHERE username = ? AND id != ?', 
+                                       (username, current_user.id)).fetchone()
+            conn.close()
+            
+            if existing_user:
+                flash('Username already taken. Please choose another.', 'error')
+            else:
+                # Update username in database
+                conn = get_db_connection()
+                conn.execute('UPDATE users SET username = ? WHERE id = ?', 
+                           (username, current_user.id))
+                conn.commit()
+                conn.close()
+                flash('Username updated successfully!', 'success')
+        
+        # Handle picture upload
+        if picture and picture.filename:
+            if allowed_file(picture.filename):
+                # Delete old picture if it's not the default
+                if current_user.image_file != 'default.jpg':
+                    old_pic_path = os.path.join(app.config['UPLOAD_FOLDER'], current_user.image_file)
+                    if os.path.exists(old_pic_path):
+                        os.remove(old_pic_path)
+                
+                # Save new picture
+                filename = secure_filename(f"user_{current_user.id}.{picture.filename.rsplit('.', 1)[1].lower()}")
+                picture.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                
+                # Update database
+                conn = get_db_connection()
+                conn.execute('UPDATE users SET image_file = ? WHERE id = ?', 
+                           (filename, current_user.id))
+                conn.commit()
+                conn.close()
+                flash('Profile picture updated successfully!', 'success')
+            else:
+                flash('Allowed file types are png, jpg, jpeg, gif', 'error')
+        
+        return redirect(url_for('account'))
+    
+    image_file = url_for('static', filename='profile_pics/' + current_user.image_file)
     return render_template('account.html', image_file=image_file)
 
 @app.route("/create", methods=["GET"])
 def simulation():
-    return render_template('threemd.html')
+    return render_template('simulation.html')
+
 
 @app.route("/save_post", methods=["POST"])
 @login_required
 def save_post():
-    if not current_user.is_authenticated:
-        return jsonify({'error': 'Authentication required'}), 401
-    
-    print("Received request to save post")  # Debug log
-    
     try:
         data = request.get_json()
-        print(f"Raw request data: {data}")  # Debug log
         
-        if not data:
-            return jsonify({'error': 'No data received'}), 400
-
-        title = data.get('title')
-        description = data.get('description')
-        
-        # Validate required fields
-        if not title:
-            return jsonify({'error': 'Title is required'}), 400
-        if not description:
-            description = ""  # Make description optional
-
-        # Prepare the complete simulation data structure
-        simulation_data = {
-            'particles': data.get('particles', []),
-            'bonds': data.get('bonds', []),
-            'settings': {
-                'boxSize': data.get('boxSize', 5),
-                'dt': data.get('dt', 0.005),
-                'maxVelocity': data.get('maxVelocity', 10.0),
-                'maxForce': data.get('maxForce', 40.0),
-                'eps': data.get('eps', 0.5),
-                'sig': data.get('sig', 0.5),
-                'temperature': data.get('temperature', 25.0)
-            }
+        # Clean the simulation data
+        clean_data = {
+            "particles": data.get("particles", []),
+            "bonds": data.get("bonds", []),
+            "settings": data.get("settings", {})
         }
+        
+        # Remove any unexpected fields
+        clean_data["settings"].pop("created_at", None)
+        clean_data["settings"].pop("temperature", None)
 
-        print(f"Processed simulation data: {simulation_data}")  # Debug log
-
-        # Validate particles data
-        if not isinstance(simulation_data['particles'], list):
-            return jsonify({'error': 'Particles data must be an array'}), 400
-
-        # Convert to JSON string
-        try:
-            particle_data_json = json.dumps(simulation_data)
-            print("Successfully converted to JSON")  # Debug log
-        except TypeError as e:
-            return jsonify({'error': f'Invalid data format: {str(e)}'}), 400
-
+        # Save to database
         conn = get_db_connection()
-        try:
-            print("Attempting to save to database...")  # Debug log
-            result = conn.execute('''
-                INSERT INTO posts (title, description, particle_data, user_id)
-                VALUES (?, ?, ?, ?)
-            ''', (title, description, particle_data_json, current_user.id))
-            
-            conn.commit()
-            print(f"Successfully saved post with ID: {result.lastrowid}")  # Debug log
-            
-            return jsonify({
-                'success': True,
-                'post_id': result.lastrowid,
-                'message': 'Post saved successfully'
-            }), 201
-            
-        except Exception as e:
-            conn.rollback()
-            print(f"Database error: {str(e)}")  # Debug log
-            return jsonify({
-                'error': 'Failed to save to database',
-                'details': str(e)
-            }), 500
-        finally:
-            conn.close()
-            
+        conn.execute('''
+            INSERT INTO posts (title, description, particle_data, user_id)
+            VALUES (?, ?, ?, ?)
+        ''', (
+            data.get("title", "Untitled"),
+            data.get("description", ""),
+            json.dumps(clean_data, ensure_ascii=False),
+            current_user.id
+        ))
+        conn.commit()
+        post_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
+        conn.close()
+        
+        return jsonify({"success": True, "post_id": post_id})
+        
     except Exception as e:
-        print(f"Unexpected error: {str(e)}")  # Debug log
-        return jsonify({
-            'error': 'Failed to process request',
-            'details': str(e)
-        }), 500
-
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/get_posts", methods=["GET"])
 def get_posts():
@@ -256,31 +267,113 @@ def get_posts():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
+# View Individual Post (GET)
 @app.route("/post/<int:post_id>")
 def view_post(post_id):
     conn = get_db_connection()
     try:
         query = '''
-            SELECT posts.id, posts.title, posts.description, posts.particle_data, 
-                   users.username, users.image_file as user_image
+            SELECT 
+                posts.id,
+                posts.title,
+                posts.description,
+                posts.particle_data,
+                users.username,
+                users.image_file as user_image,
+                users.id as user_id
             FROM posts
             JOIN users ON posts.user_id = users.id
             WHERE posts.id = ?
         '''
         post = conn.execute(query, (post_id,)).fetchone()
-        
         if not post:
-            return "Post not found.", 404
+            print("DEBUG: No post found with id:", post_id)
+            return redirect(url_for('home'))
 
-        # Convert to dict and parse JSON
-        post_dict = dict(post)
-        post_dict['particle_data'] = json.loads(post_dict['particle_data'])
+        # Debug print the retrieved post
+        print("DEBUG: Post retrieved:", dict(post))
 
-        return render_template('view_post.html', post=post_dict)
-    except json.JSONDecodeError:
-        return "Invalid particle data in post", 500
+        particle_data = post['particle_data'] or '{}'
+        if isinstance(particle_data, bytes):
+            particle_data = particle_data.decode('utf-8')
+
+        try:
+            data = json.loads(particle_data)
+            particles = data.get('particles', [])
+            bonds = data.get('bonds', [])
+            settings = data.get('settings', {})
+        except Exception as e:
+            print("DEBUG: Error parsing particle_data:", e)
+            particles, bonds, settings = [], [], {}
+
+        return render_template('view_post.html',
+                               post=dict(post),
+                               particles=particles,
+                               bonds=bonds,
+                               settings=settings)
     except Exception as e:
-        return f"Error loading post: {str(e)}", 500
+        print("DEBUG: Error loading post:", e)
+        return redirect(url_for('home'))
+    finally:
+        conn.close()
+
+           
+
+@app.route("/user/<int:user_id>")
+def view_profile(user_id):
+    conn = get_db_connection()
+    try:
+        # Get user info
+        user = conn.execute(
+            'SELECT id, username, image_file FROM users WHERE id = ?', 
+            (user_id,)
+        ).fetchone()
+        
+        if not user:
+            flash('User not found', 'error')
+            return redirect(url_for('home'))
+        
+        # Get user's posts
+        posts = conn.execute('''
+            SELECT posts.id, posts.title, posts.description, 
+                   users.username, users.image_file as user_image
+            FROM posts
+            JOIN users ON posts.user_id = users.id
+            WHERE users.id = ?
+            ORDER BY posts.id DESC
+        ''', (user_id,)).fetchall()
+        
+        return render_template(
+            'view_profile.html',
+            user=dict(user),
+            user_posts=[dict(post) for post in posts]
+        )
+    except Exception as e:
+        flash(f'Error loading profile: {str(e)}', 'error')
+        return redirect(url_for('home'))
+    finally:
+        conn.close()
+
+@app.route("/get_user_posts")
+@login_required
+def get_user_posts():
+    user_id = request.args.get('user_id', type=int)
+    if not user_id:
+        return jsonify([])
+    
+    conn = get_db_connection()
+    try:
+        query = '''
+            SELECT posts.id, posts.title, posts.description, 
+                   users.username, users.image_file as user_image
+            FROM posts
+            JOIN users ON posts.user_id = users.id
+            WHERE users.id = ?
+        '''
+        posts = conn.execute(query, (user_id,)).fetchall()
+        return jsonify([dict(post) for post in posts])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
 
