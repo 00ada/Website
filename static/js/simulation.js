@@ -118,6 +118,7 @@ class Particle {
   }
 }
 
+// Grid Based Spartial Partitioning Class
 class SpatialGrid {
   constructor(boxSize, cellSize) {
     this.boxSize = boxSize;
@@ -170,7 +171,7 @@ function updateGrid() {
   particles.forEach(p => spatialGrid.addParticle(p));
 }
 
-// ======================== SPRING BOND CLASS ========================
+// Spring Bond class
 class SpringBond {
   constructor(particle1, particle2) {
     if (!particle1 || !particle2) {
@@ -180,7 +181,7 @@ class SpringBond {
 
     this.particle1 = particle1;
     this.particle2 = particle2;
-    this.springConstant = 10000; // Increased spring constant for rigidity
+    this.springConstant = 10000; 
     this.restLength = (particle1.radius + particle2.radius) * 0.95; // Make them touch (95% of sum of radii)
 
     // Safer line initialization
@@ -356,7 +357,7 @@ function gaussianRandom(mean = 0, stdev = 1) {
   return z * stdev + mean;
 }
 
-// ==================== SELECTION MANAGEMENT ====================
+// Selection Management
 function toggleSelection(particle) {
   const index = selectedParticles.indexOf(particle);
   if(index === -1) {
@@ -468,7 +469,7 @@ function updateParticleList() {
       updateParticleList();
     });
 
-    // Color input
+    // Colour input
     const colorInput = document.createElement("input");
     colorInput.type = "color";
     colorInput.value = `#${particle.mesh.material.color.getHexString()}`;
@@ -755,7 +756,7 @@ epsilonInput.addEventListener("input", (e) => {
   const value = parseFloat(e.target.value);
   if (e.target.value === "") {
     // Allow the field to be empty while typing
-    eps = 0.5; // Temporarily set to default (this won't break the simulation)
+    eps = 0.5; // Temporarily set to default 
   } else if (isNaN(value) || value <= 0) {
     // Reset to default if the input is invalid
     eps = 0.5;
@@ -774,7 +775,7 @@ sigmaInput.addEventListener("input", (e) => {
   const value = parseFloat(e.target.value);
   if (e.target.value === "") {
     // Allow the field to be empty while typing
-    sig = 0.5; // Temporarily set to default (this won't break the simulation)
+    sig = 0.5; // Temporarily set to default 
   } else if (isNaN(value) || value <= 0) {
     // Reset to default if the input is invalid
     sig = 0.5;
