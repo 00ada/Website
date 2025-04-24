@@ -71,6 +71,7 @@ class Particle {
     vx = 0,
     vy = 0,
     vz = 0,
+    
     mass = defaultMass,
     charge = defaultCharge,
     radius = 0.3,
@@ -91,6 +92,10 @@ class Particle {
     this.fx = 0;
     this.fy = 0;
     this.fz = 0;
+
+    this.ax = 0;
+    this.ay = 0;
+    this.az = 0;
 
     const geom = new THREE.SphereGeometry(radius, 16, 16);
     const mat = new THREE.MeshBasicMaterial({ color });
@@ -554,27 +559,32 @@ document.getElementById('add-particle-button').addEventListener('click', () => {
 
 // Move Particles
 function moveParticles() {
+  // First phase: update positions based on current velocity and acceleration
   for (const p of particles) {
-    // Update velocity based on force and mass (F = ma => a = F/m)
-    p.vx += (p.fx / p.mass) * dt;
-    p.vy += (p.fy / p.mass) * dt;
-    p.vz += (p.fz / p.mass) * dt;
+    p.ax = p.fx / p.mass;
+    p.ay = p.fy / p.mass;
+    p.az = p.fz / p.mass;
 
-    // Clamp velocity to prevent unrealistic speeds
-    const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy + p.vz * p.vz);
-    if (speed > maxVelocity) {
-      const scale = maxVelocity / speed;
-      p.vx *= scale;
-      p.vy *= scale;
-      p.vz *= scale;
-    }
+    p.position.x += p.vx * dt + 0.5 * p.ax * dt * dt;
+    p.position.y += p.vy * dt + 0.5 * p.ay * dt * dt;
+    p.position.z += p.vz * dt + 0.5 * p.az * dt * dt;
+  }
 
-    // Update position based on velocity
-    p.position.x += p.vx * dt;
-    p.position.y += p.vy * dt;
-    p.position.z += p.vz * dt;
+  // Recalculate forces after moving particles
+  LJ_and_Coulomb_forces();
+  bonds.forEach(bond => bond.applyForce());
 
-    // Boundary collision (reflect particles off the walls)
+  // Second phase: update velocities using new acceleration
+  for (const p of particles) {
+    const newAx = p.fx / p.mass;
+    const newAy = p.fy / p.mass;
+    const newAz = p.fz / p.mass;
+
+    p.vx += 0.5 * (p.ax + newAx) * dt;
+    p.vy += 0.5 * (p.ay + newAy) * dt;
+    p.vz += 0.5 * (p.az + newAz) * dt;
+
+    // Handle boundary collisions (same as before)
     if (p.position.x > boxSize / 2) {
       p.position.x = boxSize / 2;
       p.vx *= -1;
@@ -599,10 +609,10 @@ function moveParticles() {
       p.vz *= -1;
     }
 
-    // Sync particle mesh position
     p.syncMeshPosition();
   }
 }
+
 
 function LJ_and_Coulomb_forces() {
   const k = 8.99 * 10 ** 9;

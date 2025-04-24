@@ -28,7 +28,7 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-def init_db():
+def init_db(): # Responsible for creating the 'post' table
     conn = get_db_connection()
     conn.execute('''
         CREATE TABLE IF NOT EXISTS posts (
@@ -65,10 +65,10 @@ def home():
             JOIN users ON posts.user_id = users.id
         '''
         posts = conn.execute(query).fetchall()
-        posts_list = [dict(post) for post in posts]  # Convert to list of dictionaries
+        posts_list = [dict(post) for post in posts]  # Convert to a list of dictionaries 
     except Exception as e:
         print(f"Error fetching posts: {e}")
-        posts_list = []  # Fallback to an empty list if there's an error
+        posts_list = []  # If there is an error then fallback to an empty list 
     finally:
         conn.close()
 
@@ -82,10 +82,10 @@ def register():
     db = UserDB("userdata.db")
     db.connect()  
     
-    if current_user.is_authenticated:
+    if current_user.is_authenticated: # Checks if the user is logged in and authenticated 
         return redirect(url_for('home'))
     
-    if request.method == "POST":
+    if request.method == "POST": # Checking if the data is posted...
         Rname = request.form.get("Rname")
         Remail = request.form.get("Remail")
         Rpassword = request.form.get("Rpassword")
@@ -95,7 +95,7 @@ def register():
         name_check = db.execute_query("SELECT username FROM users WHERE username = ? ", (Rname,))
         email_check = db.execute_query("SELECT email FROM users WHERE username = ? ", (Rname,))
         
-        if name_check.fetchone() == None:
+        if name_check.fetchone() == None: # Checks against database to see if username/email is already in use 
             db.add_user(Rname, Remail, hashed_password)
         else:
             flash("Username already in use.")
